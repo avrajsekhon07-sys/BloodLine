@@ -1,0 +1,217 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{titling}
+
+\makeatletter
+\newcommand{\BvrSetLabInstructor}[1]{\gdef\Bvr@LabInstructor{#1}}
+\newcommand{\Bvr@LabInstructor}{Dr. Anushka}
+\newcommand{\BvrLabInstructorValue}{\Bvr@LabInstructor}
+\makeatother
+
+\pretitle{\begin{center}\bfseries\fontsize{18bp}{18bp}\selectfont}
+\newcommand{\BvrSubtitle}[1]{\posttitle{\par\end{center}\begin{center}\large#1\end{center}\vskip 0.5em}}
+\newcommand{\BvrHint}[1]{{\normalfont\normalsize\itshape\hfill #1}}
+
+\title{BloodLine -- Predictive Blood Shortage \& Smart Donor Matching Platform}
+\BvrSetLabInstructor{Dr. Anushka}
+
+\BvrSubtitle{Project Proposal for UCS503P\\
+Submitted to: \BvrLabInstructorValue\\ \bfseries
+Thapar Institute of Engineering and Technology}
+
+\author{
+Avraj Singh Sekhon, COE\thanks{Roll No: \texttt{1024030287}, Email: \texttt{asekhon\_be24\@thapar.edu}}
+\and
+Krish Kumar, COE\thanks{Roll No: \texttt{1024030296}, Email: \texttt{kkumar3\_be24\@thapar.edu}}
+\and
+Kyna Sood, COE\thanks{Roll No: \texttt{1024030303}, Email: \texttt{ksood\_be24\@thapar.edu}}
+\and
+Manya Sabherwal, COE\thanks{Roll No: \texttt{1024030288}, Email: \texttt{msabherwal\_be24\@thapar.edu}}
+}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section{Higher-order goal \BvrHint{\ldots secondary framing}}
+This project aims to improve the coordination and preparedness of blood inventory management by helping participating blood banks identify potential shortages before they become urgent. The broader goal is to make blood availability more proactive and coordinated across nearby blood centres while keeping final operational and medical decisions with authorized blood-bank personnel.
+
+The immediate engineering objective is to develop a deployable software platform that combines inventory information, short-term demand forecasting, shortage-risk rules, nearby availability, donor matching, and targeted notifications into one workflow.
+
+\section{Time-to-value \BvrHint{\ldots primary heuristic}}
+\begin{itemize}[leftmargin=0.7cm]
+\item Deliver the core workflow first: inventory management, donor registration, demand forecasting, shortage-risk calculation, and role-based dashboards.
+\item Prioritize a working end-to-end prototype over advanced features so the team can validate the main workflow early.
+\item Use a clearly labelled synthetic historical-demand dataset where granular historical consumption data is not publicly available.
+\item Add donor matching, notifications, hospital requests, regional visualization, testing, and deployment improvements in later iterations.
+\end{itemize}
+
+\section{Problem Statement}
+Blood banks already maintain records of blood inventory and monitor current availability. However, future demand can vary by blood group, component, location, and time. A system that reports current stock does not by itself provide a standardized way to estimate short-term future demand and coordinate preventive action across multiple blood centres.
+
+Key engineering problems include:
+\begin{itemize}[leftmargin=0.7cm]
+\item \textbf{Reactive availability:} future shortage risk requires forecasting in addition to current inventory.
+\item \textbf{Fragmented coordination:} a potential shortage may require checking nearby blood centres and, when appropriate, reaching suitable donors.
+\item \textbf{Different operational roles:} donors, hospital coordinators, blood-bank managers, inventory staff, medical/screening staff, and system administrators need different workflows and permissions.
+\item \textbf{Data uncertainty:} granular historical blood-demand data may require authorized access, so the educational prototype needs a transparent approach to simulated demand data.
+\end{itemize}
+
+\textbf{Engineering focus:} BloodLine does not replace existing blood-bank systems or medical screening. It proposes a predictive and coordination layer for authorized users.
+
+\section{Proposed Solution \BvrHint{\ldots Software Proposition}}
+\subsection{Overview}
+Build a \textbf{web-based, multi-user} BloodLine platform with:
+\begin{itemize}[leftmargin=0.7cm]
+\item \textbf{Blood inventory management:} maintain blood-group/component stock information for participating blood banks.
+\item \textbf{Demand forecasting:} forecast short-term demand, initially for the next 3--7 days.
+\item \textbf{Shortage-risk engine:} compare predicted demand with current/expected inventory using transparent rule-based logic.
+\item \textbf{Nearby availability:} identify potentially useful nearby blood-bank availability.
+\item \textbf{Smart donor matching:} filter potential donors using compatibility, recorded donation history/cooldown, proximity, availability, and consent.
+\item \textbf{Targeted notifications:} generate relevant in-app/push alerts.
+\item \textbf{Role-based dashboards:} separate workflows for donors, blood-bank managers, inventory staff, medical/screening staff, hospital coordinators, and system administrators.
+\end{itemize}
+
+\subsection{Core workflow}
+\begin{enumerate}[leftmargin=0.7cm]
+\item Inventory staff update or verify current stock.
+\item BloodLine uses historical demand data to produce a short-term forecast.
+\item The shortage-risk engine compares predicted demand with available/expected stock.
+\item If risk is detected, the blood-bank manager reviews the risk and nearby availability.
+\item If additional donation outreach is required, BloodLine identifies potentially suitable nearby donors.
+\item Donors receive a targeted notification and may respond through the system.
+\item Medical/screening staff perform the actual donor screening and determine final eligibility.
+\item Confirmed donations and inventory changes are recorded.
+\end{enumerate}
+
+\subsection{Operational constraints for an educational setting}
+\begin{itemize}[leftmargin=0.7cm]
+\item Use synthetic historical demand data where granular real consumption data is unavailable for public use.
+\item BloodLine will not make medical diagnoses or final medical eligibility decisions.
+\item Actual blood redistribution and transport remain the responsibility of authorized blood centres.
+\item The first version will focus on a manageable number of participating blood banks and users.
+\end{itemize}
+
+\section{Solution Approach \BvrHint{\ldots Engineering focus}}
+This is a Software Engineering project, so the primary focus is requirements, multi-user workflows, architecture, database design, APIs, correctness, testing, and deployability. Forecasting is one component of the overall software system.
+
+\subsection{Demand forecasting \BvrHint{\ldots predictive component}}
+Historical daily demand for a blood group/component will be used to forecast short-term future demand. Prophet or SARIMA will be considered for the initial implementation based on data characteristics and validation results. The forecasting output is a demand estimate, not the final shortage decision.
+
+\subsection{Shortage-risk logic \BvrHint{\ldots transparent rules}}
+A rule-based layer converts the forecast into an operational signal. For example, if projected demand is greater than available/expected inventory for a specified horizon, the system can flag potential shortage risk. The rules remain transparent so staff can understand why an alert was generated.
+
+\subsection{Donor matching \BvrHint{\ldots rule-based}}
+Potential donors will be filtered using blood-group compatibility, recorded last-donation date/cooldown, approximate proximity, availability, and notification consent. These filters identify potential matches; final medical eligibility is determined by qualified blood-bank staff.
+
+\subsection{Web architecture \BvrHint{\ldots multi-user solution}}
+A three-tier architecture will be used:
+\begin{itemize}[leftmargin=0.7cm]
+\item \textbf{Frontend:} responsive interfaces and dashboards for different roles.
+\item \textbf{Backend API:} authentication, authorization, inventory operations, forecasting jobs, shortage-risk logic, donor matching, requests, and notifications.
+\item \textbf{Database:} users, roles, blood banks, inventory, donations, demand history, forecasts, requests, alerts, and audit/status records.
+\end{itemize}
+
+\subsection{Role-based access control}
+\begin{itemize}[leftmargin=0.7cm]
+\item \textbf{Donor:} profile, donation history, availability, and alerts.
+\item \textbf{Blood Bank Manager:} dashboard, predictions, reports, and coordination.
+\item \textbf{Inventory Staff:} collection, issue, expiry/discard, and stock updates.
+\item \textbf{Medical/Screening Staff:} donor screening and donation outcome records.
+\item \textbf{Hospital Coordinator:} blood requirements and request tracking.
+\item \textbf{System Administrator:} accounts, roles, permissions, and system configuration.
+\end{itemize}
+
+\subsection{CI/CD and fast delivery enabler}
+CI/CD will automatically build and test changes, maintain repeatable deployment artifacts, provide a staging version, and reduce integration problems as team members work in parallel.
+
+\section{Evaluation Criterion \BvrHint{\ldots measurable and attributable}}
+\subsection{Primary evaluation metrics}
+\textbf{Forecasting error:} compare predicted demand with actual values in a held-out test period using MAE and RMSE; MAPE may also be used where meaningful.
+
+\textbf{Shortage-risk performance:} evaluate whether the system correctly identifies shortage-risk cases in the test data. No accuracy value will be assumed before implementation.
+
+\subsection{Secondary evaluation metrics}
+\begin{itemize}[leftmargin=0.7cm]
+\item \textbf{Donor matching correctness:} verify the configured blood-group, cooldown, proximity, availability, and consent filters.
+\item \textbf{Workflow response time:} measure common API operations such as login, inventory update, dashboard loading, and donor search.
+\item \textbf{Notification targeting:} verify alerts are sent only to donors satisfying configured filters.
+\item \textbf{Reliability:} test critical workflows under expected prototype load.
+\end{itemize}
+
+\subsection{Pilot validation plan \BvrHint{\ldots high-level}}
+\begin{itemize}[leftmargin=0.7cm]
+\item Divide the synthetic demand data chronologically into training and testing periods.
+\item Compare suitable forecasting configurations using held-out error metrics.
+\item Use seeded donor and blood-bank records to test permissions, matching rules, shortage scenarios, and notification targeting.
+\item Demonstrate the complete workflow from inventory update through forecast, shortage detection, matching, screening record, and inventory update.
+\end{itemize}
+
+\section{Scalability \BvrHint{\ldots with foresight}}
+\begin{enumerate}[leftmargin=0.7cm]
+\item \textbf{Scalable (theoretically):} use stateless APIs, database indexing, pagination, scheduled forecasting jobs, and asynchronous notification processing.
+\item \textbf{Operationally deployable (practically):} use common cloud/platform hosting, a managed relational database, and CI/CD.
+\item \textbf{Primary real-world challenge:} reliable, standardized, frequently updated data integration across participating blood centres. Production deployment would require appropriate authorization and integration agreements.
+\end{enumerate}
+
+\section{Engine availability heuristic}
+A mature technology stack is available:
+\begin{itemize}[leftmargin=0.7cm]
+\item \textbf{Frontend:} React.js.
+\item \textbf{Backend:} Python FastAPI.
+\item \textbf{Database:} PostgreSQL.
+\item \textbf{Forecasting:} Python libraries such as Prophet or statsmodels/SARIMA.
+\item \textbf{Geospatial services:} mapping/geocoding services for distance and nearby-centre visualization.
+\item \textbf{Authentication:} session/token-based authentication with role-based authorization.
+\item \textbf{Notifications:} in-app/push notifications for the MVP; large-scale SMS infrastructure is future scope.
+\item \textbf{Testing:} unit and integration testing frameworks.
+\item \textbf{CI/CD:} GitHub Actions or equivalent CI tooling with staging deployment.
+\end{itemize}
+
+\section{Project scope and deliverables \BvrHint{\ldots iteration-friendly}}
+\subsection{Initial deliverable \BvrHint{\ldots first iteration}}
+\begin{itemize}[leftmargin=0.7cm]
+\item Role-based login and dashboards for main user types.
+\item Blood-bank creation and basic inventory management.
+\item Donor registration and donation-history records.
+\item Synthetic historical demand dataset and forecasting pipeline.
+\item Shortage-risk calculation using rule-based logic.
+\item Basic donor matching using configured filters.
+\item Basic audit/status logging.
+\item CI build and automated backend tests.
+\item Deployable staging prototype.
+\end{itemize}
+
+\subsection{Subsequent deliverables}
+\begin{itemize}[leftmargin=0.7cm]
+\item Regional blood-availability heatmap.
+\item Nearby blood-bank surplus/shortage coordination.
+\item Targeted in-app/push notification workflow.
+\item Hospital blood-request workflow.
+\item Medical screening workflow and donation outcome records.
+\item Improved forecasting evaluation and model comparison.
+\item Improved search, security, monitoring, and scalability.
+\end{itemize}
+
+\section{Risks and mitigations}
+\begin{itemize}[leftmargin=0.7cm]
+\item \textbf{Historical demand data access:} use clearly labelled synthetic data for the MVP and keep the data layer ready for authorized real data.
+\item \textbf{Data freshness:} record update timestamps and show data freshness.
+\item \textbf{Forecast uncertainty:} present predictions as risk signals rather than guarantees and retain human review.
+\item \textbf{Medical safety:} qualified staff perform final donor screening.
+\item \textbf{Privacy/consent:} minimize personal data, protect accounts, restrict access by role, and obtain notification consent.
+\item \textbf{Notification scaling:} start with in-app/push notifications and treat large-scale SMS as future scope.
+\item \textbf{Redistribution logistics:} provide coordination/recommendation only; authorized blood centres handle actual transfer.
+\item \textbf{Team integration:} use GitHub branching, code review, CI tests, and incremental releases.
+\end{itemize}
+
+\section{Summary}
+BloodLine proposes a multi-user software platform that adds predictive and coordination capabilities to blood inventory management. It does not replace existing blood-bank systems or medical staff. Instead, it connects inventory updates, short-term demand forecasting, transparent shortage-risk rules, nearby availability, donor matching, notifications, and role-specific workflows.
+
+The project meets the Software Engineering focus of UCS503P by emphasizing requirements, role-based access control, modular architecture, database design, APIs, testing, CI/CD, measurable evaluation, and scalability. The MVP will use clearly labelled synthetic historical demand data where granular real consumption data is unavailable, while keeping the architecture ready for authorized real-world data integration.
+
+\end{document}
