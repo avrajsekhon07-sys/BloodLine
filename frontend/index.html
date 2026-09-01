@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>BloodLine</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css"></script>
+<style>
+  body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; background:#f4f5f7; margin:0; }
+  .shell { display:flex; min-height:100vh; }
+  .sidebar { width:220px; min-width:220px; background:#111827; color:#e5e7eb; flex-shrink:0; position:sticky; top:0; height:100vh; overflow-y:auto; }
+  .sidebar .brand { padding:20px 18px; font-weight:800; font-size:20px; color:#fff; border-bottom:1px solid #1f2937; }
+  .sidebar .brand span { color:#f87171; }
+  .sidebar nav { padding:12px 0; }
+  .sidebar button { display:block; width:100%; text-align:left; padding:10px 18px; font-size:14px; color:#cbd5e1; background:none; border:none; cursor:pointer; box-sizing:border-box; }
+  .sidebar button:hover { background:#1f2937; color:#fff; }
+  .sidebar button.active { background:#ef4444; color:#fff; font-weight:600; }
+  .main { flex:1; min-width:0; padding:24px 28px; max-width:1100px; box-sizing:border-box; }
+  .topbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; gap:12px; flex-wrap:wrap; }
+  .card { background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:16px; box-shadow:0 1px 2px rgba(0,0,0,0.03); box-sizing:border-box; overflow-wrap:break-word; }
+  .stat-value { font-size:26px; font-weight:800; line-height:1.2; }
+  .stat-label { font-size:12px; color:#6b7280; margin-top:2px; }
+  .badge { font-size:11px; padding:2px 9px; border-radius:9999px; font-weight:700; display:inline-block; white-space:nowrap; }
+  .badge-HIGH, .badge-emergency, .badge-rejected { background:#fee2e2; color:#b91c1c; }
+  .badge-MODERATE, .badge-urgent, .badge-pending { background:#fef3c7; color:#b45309; }
+  .badge-LOW, .badge-routine, .badge-fulfilled, .badge-eligible { background:#dcfce7; color:#15803d; }
+  .badge-deferred, .badge-waiting { background:#e5e7eb; color:#374151; }
+  .badge-bg { background:#f3e8ff; color:#7e22ce; }
+  .row-HIGH { background:#fef2f2; }
+  .row-MODERATE { background:#fffbeb; }
+  .row-LOW { background:#f0fdf4; }
+  .shortage-row { border-radius:8px; padding:10px 12px; display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap; font-size:13px; }
+  .shortage-row .meta { color:#6b7280; }
+  table.clean { width:100%; font-size:13px; border-collapse:collapse; }
+  .table-wrap { overflow-x:auto; }
+  table.clean th { text-align:left; padding:8px; color:#6b7280; font-weight:600; border-bottom:1px solid #e5e7eb; font-size:11px; text-transform:uppercase; white-space:nowrap; }
+  table.clean td { padding:8px; border-bottom:1px solid #f1f5f9; vertical-align:top; }
+  .btn { background:#dc2626; color:#fff; border-radius:6px; padding:8px 14px; font-size:13px; font-weight:600; border:none; cursor:pointer; }
+  .btn:hover { background:#b91c1c; }
+  .btn:disabled { background:#fca5a5; cursor:not-allowed; }
+  .btn-outline { background:#fff; color:#dc2626; border:1px solid #dc2626; border-radius:6px; padding:8px 14px; font-size:13px; font-weight:600; cursor:pointer; }
+  .btn-outline:hover { background:#fef2f2; }
+  .btn-ghost { background:#f3f4f6; color:#374151; border-radius:6px; padding:6px 12px; font-size:12px; font-weight:600; border:none; cursor:pointer; white-space:nowrap; }
+  .btn-ghost:hover { background:#e5e7eb; }
+  .btn-link { background:none; border:none; color:#dc2626; font-size:12px; font-weight:600; cursor:pointer; padding:0; text-decoration:underline; }
+  input, select, textarea { border:1px solid #d1d5db; border-radius:6px; padding:8px 10px; font-size:13px; width:100%; box-sizing:border-box; }
+  .msg-ok { color:#15803d; font-size:13px; }
+  .msg-err { color:#b91c1c; font-size:13px; }
+  .synthetic-tag { font-size:11px; font-weight:700; color:#b45309; background:#fffbeb; border:1px solid #fde68a; border-radius:6px; padding:3px 8px; display:inline-block; }
+  .modal-backdrop { position:fixed; inset:0; background:rgba(17,24,39,0.5); display:flex; align-items:center; justify-content:center; z-index:50; padding:16px; }
+  .modal-box { background:#fff; border-radius:10px; padding:20px; width:420px; max-width:100%; max-height:90vh; overflow-y:auto; }
+  @media (max-width: 700px) {
+    .shell { flex-direction:column; }
+    .sidebar { width:100%; min-width:0; height:auto; position:static; }
+    .main { max-width:100%; padding:16px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<script>
+const API = "http://localhost:8000";
+let state = { token: null, role: null, fullName: null, bankId: null, page: null };
+
+// ---------------- API helper ----------------
+async function api(path, opts = {}) {
+  const headers = opts.headers || {};
+  if (state.token) headers["Authorization"] = "Bearer " + state.token;
+  if (opts.body) headers["Content-Type"] = "application/json";
+  const res = await fetch(API + path, { ...opts, headers });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || "Request failed");
+  }
+  return res.json();
+}
+
+// ---------------- Small UI helpers ----------------
+function el(html) {
+  const t = document.createElement("template");
+  t.innerHTML = html.trim();
+  return t.content.firstElementChild;
+}
+function statCard(value, label) {
+  return `<div class="card"><div class="stat-value">${value}</div><div class="stat-label">${label}</div></div>`;
+}
+function riskBadge(level) { return `<span class="badge badge-${level}">${level}</span>`; }
+function statusBadge(s) { return `<span class="badge badge-${s}">${s}</span>`; }
+function bgBadge(bg) { return `<span class="badge badge-bg">${bg}</span>`; }
+
+// ---------------- Role -> nav config ----------------
+const NAV = {
+  blood_bank_manager: [
+    ["overview", "Overview"], ["inventory", "Inventory"], ["demand", "Demand History"],
+    ["risk", "Shortage Risk"], ["requests", "Blood Requests"], ["reports", "Reports"],
+  ],
+  system_admin: [
+    ["overview", "Overview"], ["inventory", "Inventory"], ["demand", "Demand History"],
+    ["risk", "Shortage Risk"], ["requests", "Blood Requests"], ["reports", "Reports"], ["admin", "Admin"],
+  ],
+  inventory_staff: [["inventory", "Inventory"]],
+  hospital_coordinator: [["hospitalRequests", "Blood Requests"]],
+  donor: [["donorProfile", "My Profile"]],
+  medical_staff: [["screening", "Screening"]],
+};
+const DEFAULT_PAGE = {
+  blood_bank_manager: "overview", system_admin: "overview", inventory_staff: "inventory",
+  hospital_coordinator: "hospitalRequests", donor: "donorProfile", medical_staff: "screening",
+};
+
+// ---------------- Login ----------------
+function loginView() {
+  const wrap = el(`<div class="min-h-screen flex items-center justify-center" style="min-height:100vh;"></div>`);
+  const box = el(`
+    <div class="card" style="width:360px">
+      <div class="text-center mb-1">
+        <h1 class="text-3xl font-extrabold">Blood<span class="text-red-600">Line</span></h1>
+      </div>
+      <p class="text-xs text-gray-500 text-center mb-6">Smart Blood Bank Coordination Platform</p>
+      <label class="text-xs text-gray-500 font-semibold">Email</label>
+      <input id="email" class="mb-3 mt-1" placeholder="you@example.com" />
+      <label class="text-xs text-gray-500 font-semibold">Password</label>
+      <input id="password" type="password" class="mb-4 mt-1" placeholder="••••••••" />
+      <button id="loginBtn" class="btn w-full">Log in</button>
+      <p id="err" class="msg-err mt-2"></p>
+      <div class="text-center mt-5">
+        <button id="toggleDemo" class="btn-link">For demonstration: view demo accounts</button>
+      </div>
+      <div id="demoBox" class="hidden text-[11px] text-gray-500 mt-3 bg-gray-50 border rounded p-3 leading-5"></div>
+    </div>
+  `);
+  wrap.appendChild(box);
+
+  const demoAccounts = [
+    ["Manager", "manager@bloodline.demo"],
+    ["Inventory Staff", "inventory@bloodline.demo"],
+    ["Hospital Coordinator", "hospital@bloodline.demo"],
+    ["Medical / Screening", "screening@bloodline.demo"],
+    ["System Admin", "admin@bloodline.demo"],
+    ["Donor", "donor1@bloodline.demo"],
+  ];
+  const demoBox = box.querySelector("#demoBox");
+  demoBox.innerHTML = `<div class="font-semibold text-gray-600 mb-1">All use password: bloodline123</div>` +
+    demoAccounts.map(([label, email]) => `
+      <div class="flex justify-between items-center py-1">
+        <span>${label}</span>
+        <button class="btn-link useDemoBtn" data-email="${email}">${email}</button>
+      </div>
+    `).join("");
+
+  box.querySelector("#toggleDemo").onclick = () => demoBox.classList.toggle("hidden");
+  demoBox.querySelectorAll(".useDemoBtn").forEach(b => {
+    b.onclick = () => {
+      box.querySelector("#email").value = b.dataset.email;
+      box.querySelector("#password").value = "bloodline123";
+    };
+  });
+
+  box.querySelector("#loginBtn").onclick = async () => {
+    try {
+      const data = await api("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({
+          email: box.querySelector("#email").value,
+          password: box.querySelector("#password").value,
+        }),
+      });
+      state.token = data.access_token;
+      state.role = data.role;
+      state.fullName = data.full_name;
+      state.page = DEFAULT_PAGE[state.role] || null;
+      render();
+    } catch (e) {
+      box.querySelector("#err").innerText = e.message;
+    }
+  };
+  return wrap;
+}
+
+// ---------------- Shell (sidebar + topbar) ----------------
+function shell(contentRenderFn) {
+  const app = document.getElementById("app");
+  app.innerHTML = "";
+  const wrap = el(`<div class="shell"></div>`);
+
+  const nav = NAV[state.role] || [];
+  const sidebar = el(`
+    <div class="sidebar">
+      <div class="brand">Blood<span>Line</span></div>
+      <nav></nav>
+    </div>
+  `);
+  const navEl = sidebar.querySelector("nav");
+  nav.forEach(([key, label]) => {
+    const b = el(`<button class="${state.page === key ? "active" : ""}">${label}</button>`);
+    b.onclick = () => { state.page = key; render(); };
+    navEl.appendChild(b);
+  });
+  wrap.appendChild(sidebar);
+
+  const main = el(`<div class="main"></div>`);
+  const topbar = el(`
+    <div class="topbar">
+      <div>
+        <div class="font-semibold">${state.fullName}</div>
+        <div class="text-xs text-gray-500">${state.role.replace(/_/g, " ")}</div>
+      </div>
+      <button id="logout" class="btn-ghost">Log out</button>
+    </div>
+  `);
+  topbar.querySelector("#logout").onclick = () => { state = { token: null }; render(); };
+  main.appendChild(topbar);
+
+  const content = el(`<div></div>`);
+  main.appendChild(content);
+  wrap.appendChild(main);
+  app.appendChild(wrap);
+
+  contentRenderFn(content).catch(e => {
+    content.innerHTML = `<p class="msg-err">Error: ${e.message}</p>`;
+  });
+}
+
+// ---------------- Shared data loaders ----------------
+async function ensureBankId() {
+  if (state.bankId) return state.bankId;
+  const inv = await api("/inventory");
+  state.bankId = inv[0]?.blood_bank_id || null;
+  return state.bankId;
+}
+
+async function loadRisk(bankId) {
+  return api(`/risk/${bankId}`);
+}
+
+// Shared donor-match renderer — used by every "Find donors" button so behaviour is identical everywhere.
+async function findDonorsInto(targetEl, bloodGroup) {
+  targetEl.innerHTML = `<p class="text-xs text-gray-500 mt-1">Matching donors for ${bloodGroup}...</p>`;
+  try {
+    const matches = await api(`/donors/match/${encodeURIComponent(bloodGroup)}`);
+    if (matches.length === 0) {
+      targetEl.innerHTML = `<p class="text-xs text-gray-500 mt-1">No eligible donors found for ${bloodGroup} right now.</p>`;
+      return;
+    }
+    targetEl.innerHTML = `
+      <div class="table-wrap mt-2">
+        <table class="clean">
+          <thead><tr><th>Donor</th><th>Group</th><th>Last donation</th><th>Score</th><th>Why compatible</th></tr></thead>
+          <tbody>
+            ${matches.map(m => `<tr>
+              <td>${m.full_name}</td>
+              <td>${bgBadge(m.blood_group)}</td>
+              <td>${m.days_since_last_donation !== null ? m.days_since_last_donation + " days ago" : "never donated"}</td>
+              <td class="font-bold text-red-600">${m.match_score}</td>
+              <td class="text-xs text-gray-500">${m.reasons.join("; ")}</td>
+            </tr>`).join("")}
+          </tbody>
+        </table>
+      </div>
+    `;
+  } catch (e) {
+    targetEl.innerHTML = `<p class="msg-err mt-1">✗ ${e.message}</p>`;
+  }
+}
+
+// ================= MANAGER / ADMIN: Overview =================
+async function pageOverview(content) {
+  const bankId = await ensureBankId();
+  content.innerHTML = `<p class="text-sm text-gray-500">Loading overview...</p>`;
+
+  const [inventory, risks, pending] = await Promise.all([
+    api("/inventory"),
+    bankId ? loadRisk(bankId) : Promise.resolve([]),
+    api("/requests?status=pending").catch(() => []),
+  ]);
+
+  const totalStock = inventory.reduce((s, i) => s + i.quantity_units, 0);
+  const highRisk = risks.filter(r => r.risk_level === "HIGH");
+  const modRisk = risks.filter(r => r.risk_level === "MODERATE");
+
+  content.innerHTML = `
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+      ${statCard(totalStock, "Total stock (units)")}
+      ${statCard(highRisk.length, "High-risk groups")}
+      ${statCard(pending.length, "Pending requests")}
+      ${statCard(inventory.length, "Blood-group slots tracked")}
+    </div>
+
+    <div class="card mb-6">
+      <div class="flex justify-between items-center mb-3">
+        <h2 class="font-semibold">Critical Shortages</h2>
+        <span class="text-xs text-gray-400">Forecast vs. current stock, 7-day horizon</span>
+      </div>
+      <div id="criticalList" class="space-y-2"></div>
+    </div>
+
+    <div class="card">
+      <h2 class="font-semibold mb-3">Pending Blood Requests</h2>
+      <div id="pendingList"></div>
+    </div>
+  `;
+
+  const criticalList = content.querySelector("#criticalList");
+  const critical = [...highRisk, ...modRisk];
+  if (critical.length === 0) {
+    criticalList.innerHTML = `<p class="text-sm text-gray-500">No high or moderate risk groups right now.</p>`;
+  } else {
+    criticalList.innerHTML = critical.map((r, i) => `
+      <div class="row-${r.risk_level}" style="border-radius:8px;">
+        <div class="shortage-row">
+          <div class="meta">${bgBadge(r.blood_group)} <span class="ml-2">stock ${r.current_stock} · 7-day forecast ${r.predicted_demand} · shortfall ${r.shortfall}</span></div>
+          <div class="flex items-center gap-2">${riskBadge(r.risk_level)}<button class="btn-ghost findBtn" data-bg="${r.blood_group}" data-idx="${i}">Find donors</button></div>
+        </div>
+        <div class="donorResults px-3 pb-2" data-idx="${i}"></div>
+      </div>
+    `).join("");
+    criticalList.querySelectorAll(".findBtn").forEach(btn => {
+      btn.onclick = () => {
+        const target = criticalList.querySelector(`.donorResults[data-idx="${btn.dataset.idx}"]`);
+        findDonorsInto(target, btn.dataset.bg);
+      };
+    });
+  }
+
+  const pendingList = content.querySelector("#pendingList");
+  pendingList.innerHTML = pending.length === 0
+    ? `<p class="text-sm text-gray-500">No pending requests.</p>`
+    : `<div class="table-wrap"><table class="clean"><thead><tr><th>Hospital</th><th>Group</th><th>Units</th><th>Urgency</th><th></th></tr></thead><tbody>
+        ${pending.map(r => `<tr>
+          <td>${r.hospital_name}</td><td>${bgBadge(r.blood_group)}</td><td>${r.quantity_units}</td>
+          <td>${statusBadge(r.urgency)}</td><td class="text-xs text-gray-400">See Blood Requests page</td>
+        </tr>`).join("")}
+      </tbody></table></div>`;
+}
+
+// ================= MANAGER / ADMIN: Inventory =================
+async function pageManagerInventory(content) {
+  const inventory = await api("/inventory");
+  content.innerHTML = `
+    <div class="card">
+      <h2 class="font-semibold mb-3">Current Inventory</h2>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        ${inventory.map(i => `<div class="card text-center"><div class="text-2xl font-bold">${i.quantity_units}</div><div class="text-xs text-gray-500">${i.blood_group} units</div></div>`).join("")}
+      </div>
+    </div>
+  `;
+}
+
+// ================= MANAGER / ADMIN: Demand History =================
+async function pageDemand(content) {
+  const bloodGroups = ["A+","A-","B+","B-","AB+","AB-","O+","O-"];
+  content.innerHTML = `
+    <div class="card">
+      <h2 class="font-semibold mb-1">Demand History</h2>
+      <span class="synthetic-tag mb-2 inline-block">Synthetic / Simulated Demand Data</span>
+      <p class="text-xs text-gray-600 bg-gray-50 border rounded p-2 mb-3">
+        Generated using a baseline, weekly pattern, seasonal variation, holiday/event bumps, emergency
+        spikes and random noise — because granular real blood-bank consumption data is not available to
+        the prototype. These are the exact stored records the forecast below also reads.
+      </p>
+      <select id="demandBg" class="mb-3" style="width:140px">
+        ${bloodGroups.map(b => `<option ${b === "B+" ? "selected" : ""}>${b}</option>`).join("")}
+      </select>
+      <div id="demandStats" class="grid grid-cols-2 md:grid-cols-5 gap-2 mb-4 text-center"></div>
+      <div id="demandChart" class="mb-4"></div>
+      <div id="demandTableWrap" class="border rounded max-h-72 overflow-y-auto"></div>
+    </div>
+  `;
+  const select = content.querySelector("#demandBg");
+  const statsEl = content.querySelector("#demandStats");
+  const chartEl = content.querySelector("#demandChart");
+  const tableWrap = content.querySelector("#demandTableWrap");
+
+  function renderChart(points) {
+    const w = 640, h = 160, pad = 22;
+    const values = points.map(p => p.units_demanded);
+    const min = Math.min(...values), max = Math.max(...values);
+    const range = max - min || 1;
+    const stepX = (w - pad * 2) / Math.max(points.length - 1, 1);
+    const coords = points.map((p, i) => {
+      const x = pad + i * stepX;
+      const y = h - pad - ((p.units_demanded - min) / range) * (h - pad * 2);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(" ");
+    chartEl.innerHTML = `<svg viewBox="0 0 ${w} ${h}" class="w-full border rounded bg-gray-50">
+      <polyline fill="none" stroke="#dc2626" stroke-width="1.5" points="${coords}" />
+    </svg>`;
+  }
+
+  async function load() {
+    const bg = select.value;
+    const points = await api(`/demand/history?blood_group=${encodeURIComponent(bg)}`);
+    if (points.length === 0) {
+      statsEl.innerHTML = `<div class="col-span-5 text-xs text-gray-500">No history — run the seed script.</div>`;
+      chartEl.innerHTML = ""; tableWrap.innerHTML = "";
+      return;
+    }
+    const values = points.map(p => p.units_demanded);
+    const avg = values.reduce((a, b) => a + b, 0) / values.length;
+    statsEl.innerHTML = [
+      [points.length, "Records"], [`${points[0].date} → ${points[points.length-1].date}`, "Date range"],
+      [bg, "Blood group"], [avg.toFixed(1), "Avg / day"], [`${Math.min(...values).toFixed(1)} / ${Math.max(...values).toFixed(1)}`, "Min / Max"],
+    ].map(([v, l]) => statCard(v, l)).join("");
+    renderChart(points);
+    tableWrap.innerHTML = `<div class="table-wrap"><table class="clean"><thead><tr><th>Date</th><th>Group</th><th class="text-right">Units</th></tr></thead><tbody>
+      ${points.map(p => `<tr><td>${p.date}</td><td>${bg}</td><td class="text-right">${p.units_demanded}</td></tr>`).join("")}
+    </tbody></table></div>`;
+  }
+  select.onchange = load;
+  await load();
+}
+
+// ================= MANAGER / ADMIN: Shortage Risk =================
+async function pageRisk(content) {
+  const bankId = await ensureBankId();
+  content.innerHTML = `
+    <div class="card">
+      <div class="flex justify-between items-center mb-3 flex-wrap gap-2">
+        <h2 class="font-semibold">Shortage Risk</h2>
+        <span class="text-xs text-gray-400">Current stock vs. 7-day demand forecast</span>
+      </div>
+      <div id="riskList" class="space-y-2"></div>
+    </div>
+  `;
+  const riskList = content.querySelector("#riskList");
+  if (!bankId) { riskList.innerHTML = `<p class="text-sm text-gray-500">No blood bank found.</p>`; return; }
+  const risks = await loadRisk(bankId);
+  risks.sort((a,b) => ({HIGH:0,MODERATE:1,LOW:2}[a.risk_level]) - ({HIGH:0,MODERATE:1,LOW:2}[b.risk_level]));
+  riskList.innerHTML = risks.map((r, i) => `
+    <div class="border rounded p-3 row-${r.risk_level}">
+      <div class="flex justify-between items-center mb-1 flex-wrap gap-2">
+        ${bgBadge(r.blood_group)} ${riskBadge(r.risk_level)}
+      </div>
+      <p class="text-sm text-gray-700 mb-2">${r.explanation}</p>
+      ${r.risk_level !== "LOW" ? `<button class="btn-ghost findBtn" data-bg="${r.blood_group}" data-idx="${i}">Find donors</button>` : ""}
+      <div class="donorResults" data-idx="${i}"></div>
+    </div>
+  `).join("");
+  riskList.querySelectorAll(".findBtn").forEach(btn => {
+    btn.onclick = () => {
+      const target = riskList.querySelector(`.donorResults[data-idx="${btn.dataset.idx}"]`);
+      findDonorsInto(target, btn.dataset.bg);
+    };
+  });
+}
+
+// ================= MANAGER / ADMIN: Blood Requests review =================
+async function pageManagerRequests(content) {
+  content.innerHTML = `<div class="card"><h2 class="font-semibold mb-3">Blood Requests</h2><p id="msg" class="text-sm mb-2"></p><div id="reqList"></div></div>`;
+  const reqList = content.querySelector("#reqList");
+  const msg = content.querySelector("#msg");
+
+  async function load() {
+    const reqs = await api("/requests");
+    reqList.innerHTML = reqs.length === 0 ? `<p class="text-sm text-gray-500">No requests yet.</p>` :
+      `<div class="table-wrap"><table class="clean"><thead><tr><th>Hospital</th><th>Group</th><th>Units</th><th>Urgency</th><th>Status</th><th>Notes</th><th></th></tr></thead><tbody>
+        ${reqs.map(r => `<tr>
+          <td>${r.hospital_name}</td><td>${bgBadge(r.blood_group)}</td><td>${r.quantity_units}</td>
+          <td>${statusBadge(r.urgency)}</td><td>${statusBadge(r.status)}</td>
+          <td class="text-xs text-gray-500">${r.notes || ""}</td>
+          <td>${r.status === "pending" ? `
+            <button class="btn-ghost approveBtn" data-id="${r.id}">Approve</button>
+            <button class="btn-ghost rejectBtn" data-id="${r.id}">Reject</button>` : ""}</td>
+        </tr>`).join("")}
+      </tbody></table></div>`;
+
+    reqList.querySelectorAll(".approveBtn").forEach(b => b.onclick = async () => {
+      b.disabled = true; msg.className = "text-sm mb-2"; msg.innerText = "";
+      try {
+        await api(`/requests/${b.dataset.id}/approve`, { method: "POST" });
+        msg.className = "msg-ok mb-2"; msg.innerText = "✓ Request approved — inventory updated if stock was sufficient.";
+        await load();
+      } catch (e) {
+        msg.className = "msg-err mb-2"; msg.innerText = "✗ " + e.message;
+        b.disabled = false;
+      }
+    });
+    reqList.querySelectorAll(".rejectBtn").forEach(b => b.onclick = async () => {
+      b.disabled = true; msg.className = "text-sm mb-2"; msg.innerText = "";
+      try {
+        await api(`/requests/${b.dataset.id}/reject`, { method: "POST" });
+        msg.className = "msg-ok mb-2"; msg.innerText = "✓ Request rejected.";
+        await load();
+      } catch (e) {
+        msg.className = "msg-err mb-2"; msg.innerText = "✗ " + e.message;
+        b.disabled = false;
+      }
+    });
+  }
+  await load();
+}
+
+// ================= MANAGER / ADMIN: Reports =================
+async function pageReports(content) {
+  content.innerHTML = `<p class="text-sm text-gray-500">Loading report...</p>`;
+  const r = await api("/reports/summary");
+  content.innerHTML = `
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+      ${statCard(r.total_inventory_units, "Total inventory (units)")}
+      ${statCard(r.units_received, "Units received")}
+      ${statCard(r.units_issued, "Units issued")}
+      ${statCard(r.units_expired_discarded, "Expired / discarded")}
+    </div>
+    <div class="card mb-4">
+      <h2 class="font-semibold mb-2">Blood Group Distribution</h2>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+        ${Object.entries(r.inventory_by_group).map(([bg, qty]) => `<div class="card text-center"><div class="text-xl font-bold">${qty}</div><div class="text-xs text-gray-500">${bg}</div></div>`).join("")}
+      </div>
+    </div>
+    <div class="card mb-4">
+      <h2 class="font-semibold mb-2">Blood Requests Summary</h2>
+      <div class="flex flex-wrap gap-2">
+        ${Object.entries(r.requests_summary).map(([status, count]) => `<span class="badge badge-${status}">${status}: ${count}</span>`).join("")}
+      </div>
+    </div>
+    <div class="card mb-4">
+      <h2 class="font-semibold mb-2">Risk Summary</h2>
+      <p class="text-sm">HIGH: ${r.high_risk_groups.map(bgBadge).join(" ") || "none"}</p>
+      <p class="text-sm mt-1">MODERATE: ${r.moderate_risk_groups.map(bgBadge).join(" ") || "none"}</p>
+    </div>
+    <div class="card">
+      <h2 class="font-semibold mb-2">Demand vs. 7-Day Forecast (avg/day vs. predicted units)</h2>
+      <div class="table-wrap">
+        <table class="clean"><thead><tr><th>Group</th><th>Avg daily demand</th><th>7-day forecast</th></tr></thead><tbody>
+          ${Object.keys(r.demand_summary).map(bg => `<tr><td>${bgBadge(bg)}</td><td>${r.demand_summary[bg]}</td><td>${r.forecast_summary[bg] ?? "-"}</td></tr>`).join("")}
+        </tbody></table>
+      </div>
+    </div>
+  `;
+}
+
+// ================= ADMIN =================
+async function pageAdmin(content) {
+  content.innerHTML = `<p class="text-sm text-gray-500">Loading...</p>`;
+  const [summary, users] = await Promise.all([api("/admin/summary"), api("/admin/users")]);
+  content.innerHTML = `
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+      ${statCard(summary.total_users, "Total users")}
+      ${statCard(summary.total_donors, "Donors")}
+      ${statCard(summary.total_hospitals, "Hospitals")}
+      ${statCard(summary.total_blood_banks, "Blood banks")}
+    </div>
+    <div class="card mb-4">
+      <h2 class="font-semibold mb-2">Users by Role</h2>
+      <div class="flex flex-wrap gap-2">
+        ${Object.entries(summary.users_by_role).map(([role, count]) => `<span class="badge badge-bg">${role.replace(/_/g," ")}: ${count}</span>`).join("")}
+      </div>
+    </div>
+    <div class="card">
+      <h2 class="font-semibold mb-2">All Users</h2>
+      <div class="table-wrap"><table class="clean"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th></tr></thead><tbody>
+        ${users.map(u => `<tr><td>${u.full_name}</td><td>${u.email}</td><td>${u.role.replace(/_/g," ")}</td><td>${u.is_active ? '<span class="badge badge-fulfilled">active</span>' : '<span class="badge badge-rejected">inactive</span>'}</td></tr>`).join("")}
+      </tbody></table></div>
+    </div>
+  `;
+}
+// ================= INVENTORY STAFF =================
+async function pageInventoryStaff(content) {
+  content.innerHTML = `<p class="text-sm text-gray-500">Loading...</p>`;
+  const [inventory, transactions] = await Promise.all([api("/inventory"), api("/inventory/transactions").catch(() => [])]);
+  content.innerHTML = `
+    <div class="card mb-6">
+      <h2 class="font-semibold mb-3">Record Transaction</h2>
+      <div class="grid grid-cols-2 gap-3 mb-2">
+        <select id="bg">${["A+","A-","B+","B-","AB+","AB-","O+","O-"].map(b=>`<option>${b}</option>`).join("")}</select>
+        <select id="type">
+          <option value="receipt">Receipt (incoming)</option>
+          <option value="issue">Issue (used)</option>
+          <option value="expiry">Expiry</option>
+          <option value="discard">Discard</option>
+        </select>
+        <input id="qty" type="number" min="1" placeholder="Units" />
+        <button id="submitTxn" class="btn">Record transaction</button>
+      </div>
+      <p id="msg" class="text-sm"></p>
+    </div>
+    <div class="card mb-6">
+      <h2 class="font-semibold mb-3">Current Inventory</h2>
+      <p class="text-xs text-gray-500 mb-2">Tiles below 15 units are flagged low-stock — check Shortage Risk on the manager dashboard for the full forecast-based picture.</p>
+      <div id="grid" class="grid grid-cols-2 md:grid-cols-4 gap-3"></div>
+    </div>
+    <div class="card">
+      <h2 class="font-semibold mb-3">Recent Transactions</h2>
+      <div id="txnList"></div>
+    </div>
+  `;
+  const bankId = inventory[0]?.blood_bank_id;
+  const grid = content.querySelector("#grid");
+  const msg = content.querySelector("#msg");
+  const txnList = content.querySelector("#txnList");
+
+  function renderGrid(items) {
+    grid.innerHTML = items.map(i => `
+      <div class="card text-center ${i.quantity_units < 15 ? "row-HIGH" : ""}">
+        <div class="text-2xl font-bold">${i.quantity_units}</div>
+        <div class="text-xs text-gray-500">${i.blood_group} units</div>
+        ${i.quantity_units < 15 ? '<div class="badge badge-HIGH mt-1">low stock</div>' : ""}
+      </div>
+    `).join("");
+  }
+  function renderTxns(items) {
+    txnList.innerHTML = items.length === 0 ? `<p class="text-sm text-gray-500">No transactions recorded yet.</p>` :
+      `<div class="table-wrap"><table class="clean"><thead><tr><th>Date</th><th>Group</th><th>Type</th><th class="text-right">Units</th><th>Note</th></tr></thead><tbody>
+        ${items.map(t => `<tr><td class="text-xs">${fmtDateTime(t.created_at)}</td><td>${bgBadge(t.blood_group)}</td><td>${statusBadge(t.txn_type)}</td><td class="text-right">${t.quantity_units}</td><td class="text-xs text-gray-500">${t.note || ""}</td></tr>`).join("")}
+      </tbody></table></div>`;
+  }
+  renderGrid(inventory);
+  renderTxns(transactions);
+
+  content.querySelector("#submitTxn").onclick = async () => {
+    const qty = parseInt(content.querySelector("#qty").value, 10);
+    if (!qty || qty <= 0) { msg.className = "msg-err"; msg.innerText = "Enter a positive number of units."; return; }
+    try {
+      await api("/inventory/transaction", {
+        method: "POST",
+        body: JSON.stringify({
+          blood_bank_id: bankId,
+          blood_group: content.querySelector("#bg").value,
+          txn_type: content.querySelector("#type").value,
+          quantity_units: qty,
+        }),
+      });
+      msg.className = "msg-ok"; msg.innerText = "✓ Transaction recorded successfully";
+      renderGrid(await api("/inventory"));
+      renderTxns(await api("/inventory/transactions").catch(() => []));
+    } catch (e) {
+      msg.className = "msg-err"; msg.innerText = "✗ " + e.message;
+    }
+  };
+}
+
+// ================= HOSPITAL COORDINATOR =================
+async function pageHospitalRequests(content) {
+  content.innerHTML = `
+    <div class="card mb-6">
+      <h2 class="font-semibold mb-3">New Blood Request</h2>
+      <div class="grid grid-cols-2 gap-3 mb-2">
+        <select id="bg">${["A+","A-","B+","B-","AB+","AB-","O+","O-"].map(b=>`<option>${b}</option>`).join("")}</select>
+        <select id="urgency">
+          <option value="routine">Routine</option>
+          <option value="urgent">Urgent</option>
+          <option value="emergency">Emergency</option>
+        </select>
+        <input id="qty" type="number" min="1" placeholder="Units required" />
+        <input id="notes" placeholder="Notes (optional)" />
+      </div>
+      <button id="submitReq" class="btn">Submit request</button>
+      <p id="msg" class="text-sm mt-2"></p>
+    </div>
+    <div class="card">
+      <h2 class="font-semibold mb-3">My Requests</h2>
+      <div id="list"></div>
+    </div>
+  `;
+  const msg = content.querySelector("#msg");
+  const list = content.querySelector("#list");
+
+  async function loadList() {
+    const reqs = await api("/hospital/requests");
+    list.innerHTML = reqs.length === 0 ? `<p class="text-sm text-gray-500">No requests yet.</p>` :
+      `<div class="table-wrap"><table class="clean"><thead><tr><th>Group</th><th>Units</th><th>Urgency</th><th>Status</th><th>Notes</th></tr></thead><tbody>
+        ${reqs.map(r => `<tr><td>${bgBadge(r.blood_group)}</td><td>${r.quantity_units}</td><td>${statusBadge(r.urgency)}</td><td>${statusBadge(r.status)}</td><td class="text-xs text-gray-500">${r.notes || ""}</td></tr>`).join("")}
+      </tbody></table></div>`;
+  }
+
+  content.querySelector("#submitReq").onclick = async () => {
+    const qty = parseInt(content.querySelector("#qty").value, 10);
+    if (!qty || qty <= 0) { msg.className = "msg-err"; msg.innerText = "Enter a positive number of units."; return; }
+    try {
+      await api("/hospital/requests", {
+        method: "POST",
+        body: JSON.stringify({
+          blood_group: content.querySelector("#bg").value,
+          urgency: content.querySelector("#urgency").value,
+          quantity_units: qty,
+          notes: content.querySelector("#notes").value || null,
+        }),
+      });
+      msg.className = "msg-ok"; msg.innerText = "✓ Request submitted successfully";
+      content.querySelector("#qty").value = ""; content.querySelector("#notes").value = "";
+      await loadList();
+    } catch (e) {
+      msg.className = "msg-err"; msg.innerText = "✗ " + e.message;
+    }
+  };
+  await loadList();
+}
+
+// ================= DONOR =================
+async function pageDonorProfile(content) {
+  content.innerHTML = `<p class="text-sm text-gray-500">Loading profile...</p>`;
+  const p = await api("/donor/me");
+  content.innerHTML = `
+    <div class="card mb-6">
+      <div class="flex justify-between items-start">
+        <div>
+          <h2 class="text-xl font-bold">${p.full_name}</h2>
+          <p class="text-sm text-gray-500">${p.email}</p>
+        </div>
+        ${bgBadge(p.blood_group)}
+      </div>
+      <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mt-4">
+        ${statCard(p.cooldown_cleared ? "Eligible" : "In cooldown", "Donation eligibility")}
+        ${statCard(p.days_since_last_donation ?? "Never donated", "Days since last donation")}
+        ${statCard(p.donations.length, "Total donations")}
+      </div>
+    </div>
+    <div class="card mb-6">
+      <h2 class="font-semibold mb-3">Availability & Consent</h2>
+      <label class="flex items-center gap-2 mb-2 text-sm"><input type="checkbox" id="avail" ${p.is_available ? "checked" : ""} /> Available to be contacted for donation</label>
+      <label class="flex items-center gap-2 mb-3 text-sm"><input type="checkbox" id="consent" ${p.notification_consent ? "checked" : ""} /> Consent to receive shortage alerts</label>
+      <button id="saveAvail" class="btn-outline">Save</button>
+      <p id="msg" class="text-sm mt-2"></p>
+    </div>
+    <div class="card">
+      <h2 class="font-semibold mb-3">Donation History</h2>
+      ${p.donations.length === 0 ? `<p class="text-sm text-gray-500">No recorded donations yet.</p>` :
+        `<table class="clean"><thead><tr><th>Date</th><th>Units</th></tr></thead><tbody>
+          ${p.donations.map(d => `<tr><td>${d.donation_date}</td><td>${d.units_collected}</td></tr>`).join("")}
+        </tbody></table>`}
+    </div>
+  `;
+  const msg = content.querySelector("#msg");
+  content.querySelector("#saveAvail").onclick = async () => {
+    try {
+      await api("/donor/me/availability", {
+        method: "PUT",
+        body: JSON.stringify({
+          is_available: content.querySelector("#avail").checked,
+          notification_consent: content.querySelector("#consent").checked,
+        }),
+      });
+      msg.className = "msg-ok"; msg.innerText = "✓ Preferences saved";
+    } catch (e) {
+      msg.className = "msg-err"; msg.innerText = "✗ " + e.message;
+    }
+  };
+}
+
+// ================= MEDICAL / SCREENING STAFF =================
+function fmtDateTime(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+}
+
+async function pageScreening(content) {
+  content.innerHTML = `<p class="text-sm text-gray-500">Loading candidates...</p>`;
+
+  async function loadTable() {
+    const candidates = await api("/screening/candidates");
+    content.innerHTML = `
+      <div class="card">
+        <h2 class="font-semibold mb-1">Screening</h2>
+        <p class="text-xs text-gray-500 mb-3">Records a screening outcome only — BloodLine does not make the medical eligibility decision itself; a human medical staff member does.</p>
+        <div class="table-wrap">
+          <table class="clean">
+            <thead><tr><th>Donor</th><th>Group</th><th>Cooldown</th><th>Available</th><th>Last outcome</th><th>Last screened</th><th></th></tr></thead>
+            <tbody>
+              ${candidates.map(c => `<tr>
+                <td>${c.full_name}</td><td>${bgBadge(c.blood_group)}</td>
+                <td>${c.cooldown_cleared ? '<span class="badge badge-fulfilled">cleared</span>' : '<span class="badge badge-waiting">waiting</span>'}</td>
+                <td>${c.is_available ? "yes" : "no"}</td>
+                <td>${c.last_screening_outcome ? statusBadge(c.last_screening_outcome) : "—"}</td>
+                <td class="text-xs text-gray-500">${fmtDateTime(c.last_screened_at)}</td>
+                <td><button class="btn-ghost screenBtn"
+                    data-id="${c.donor_id}" data-name="${c.full_name}" data-bg="${c.blood_group}"
+                    data-avail="${c.is_available}" data-cooldown="${c.cooldown_cleared}"
+                    data-days="${c.days_since_last_donation ?? ""}">Screen</button></td>
+              </tr>`).join("")}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+    content.querySelectorAll(".screenBtn").forEach(btn => {
+      btn.onclick = () => openScreeningModal(btn.dataset, loadTable);
+    });
+  }
+
+  await loadTable();
+}
+
+function openScreeningModal(d, onDone) {
+  const backdrop = el(`
+    <div class="modal-backdrop">
+      <div class="modal-box">
+        <h3 class="font-semibold text-lg mb-3">Screen: ${d.name}</h3>
+        <div class="grid grid-cols-2 gap-2 text-xs mb-4 bg-gray-50 border rounded p-3">
+          <div><span class="text-gray-500">Blood group</span><br/>${bgBadge(d.bg)}</div>
+          <div><span class="text-gray-500">Availability</span><br/>${d.avail === "true" ? "Available" : "Not available"}</div>
+          <div><span class="text-gray-500">Cooldown</span><br/>${d.cooldown === "true" ? "Cleared" : "Still waiting"}</div>
+          <div><span class="text-gray-500">Last donation</span><br/>${d.days ? d.days + " days ago" : "Never donated"}</div>
+        </div>
+        <label class="text-xs text-gray-500 font-semibold">Screening outcome</label>
+        <select id="outcome" class="mb-3 mt-1">
+          <option value="eligible">Eligible</option>
+          <option value="deferred">Deferred</option>
+          <option value="rejected">Not eligible</option>
+        </select>
+        <label class="text-xs text-gray-500 font-semibold">Notes</label>
+        <textarea id="notes" rows="3" class="mb-3 mt-1" placeholder="Screening notes (optional)"></textarea>
+        <div class="flex gap-2">
+          <button id="saveScreen" class="btn">Save outcome</button>
+          <button id="cancelScreen" class="btn-ghost">Cancel</button>
+        </div>
+        <p id="modalMsg" class="text-sm mt-2"></p>
+      </div>
+    </div>
+  `);
+  document.body.appendChild(backdrop);
+  backdrop.querySelector("#cancelScreen").onclick = () => backdrop.remove();
+  backdrop.addEventListener("click", (e) => { if (e.target === backdrop) backdrop.remove(); });
+
+  backdrop.querySelector("#saveScreen").onclick = async () => {
+    const msg = backdrop.querySelector("#modalMsg");
+    const saveBtn = backdrop.querySelector("#saveScreen");
+    saveBtn.disabled = true;
+    try {
+      await api("/screening", {
+        method: "POST",
+        body: JSON.stringify({
+          donor_id: d.id,
+          outcome: backdrop.querySelector("#outcome").value,
+          notes: backdrop.querySelector("#notes").value || null,
+        }),
+      });
+      msg.className = "msg-ok mt-2"; msg.innerText = "✓ Screening outcome recorded";
+      await onDone();
+      setTimeout(() => backdrop.remove(), 600);
+    } catch (e) {
+      msg.className = "msg-err mt-2"; msg.innerText = "✗ " + e.message;
+      saveBtn.disabled = false;
+    }
+  };
+}
+
+// ---------------- Page router ----------------
+const PAGES = {
+  overview: pageOverview,
+  inventory: pageManagerInventory,
+  demand: pageDemand,
+  risk: pageRisk,
+  requests: pageManagerRequests,
+  reports: pageReports,
+  admin: pageAdmin,
+  hospitalRequests: pageHospitalRequests,
+  donorProfile: pageDonorProfile,
+  screening: pageScreening,
+};
+
+function render() {
+  if (!state.token) {
+    const app = document.getElementById("app");
+    app.innerHTML = "";
+    app.appendChild(loginView());
+    return;
+  }
+  if (state.role === "inventory_staff") { shell(pageInventoryStaff); return; }
+  shell(PAGES[state.page] || pageOverview);
+}
+
+render();
+</script>
+</body>
+</html>
