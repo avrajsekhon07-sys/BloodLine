@@ -1,0 +1,421 @@
+\documentclass[12pt,twoside]{report}
+
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{float}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{hyperref}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{needspace}
+\hypersetup{colorlinks=false, pdfborder={0 0 0}}
+\raggedbottom
+
+\titleformat{\chapter}[display]
+  {\normalfont\raggedleft}
+  {\hfill\bfseries\Large Chapter \thechapter}
+  {10pt}
+  {\huge\bfseries}
+  [\vspace{4pt}\titlerule]
+\titlespacing*{\chapter}{0pt}{20pt}{20pt}
+
+% ---------------- Running headers/footers (match original template) ----------------
+\renewcommand{\sectionmark}[1]{\markright{\thesection.\quad #1}}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[LE]{\itshape\thepage\quad UCS503 -- Software Engineering}
+\fancyhead[RO]{\itshape\rightmark\quad\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0pt}
+\fancypagestyle{plain}{%
+  \fancyhf{}
+  \fancyfoot[C]{\thepage}
+  \renewcommand{\headrulewidth}{0pt}
+}
+
+\title{}
+\date{}
+
+\begin{document}
+
+% ---------------- Title Page ----------------
+\begin{titlepage}
+\centering
+\vspace*{2cm}
+{\large \textbf{UCS503 -- Software Engineering}}\\[3cm]
+
+{\Huge \textbf{BloodLine}}\\[0.5cm]
+{\large Predictive Blood Shortage and Smart Donor Matching Platform}\\[3cm]
+
+{\large \textbf{Submitted by:}}\\[0.4cm]
+1024030287 Avraj Singh Sekhon\\
+1024030288 Manya Sabherwal\\
+1024030296 Krish Kumar\\
+1024030303 Kyna Sood\\[0.4cm]
+Group: 3C22 Third Year, CSE\\[2cm]
+
+{\large \textbf{Submitted to:}}\\[0.4cm]
+Dr. Anushka\\[3cm]
+
+Mid-Semester Evaluation\\
+\textbf{Computer Science and Engineering Department}\\
+Thapar Institute of Engineering and Technology, Patiala
+
+\end{titlepage}
+
+% ---------------- Table of Contents ----------------
+\pagenumbering{gobble}
+\tableofcontents
+\clearpage
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+% ==========================================================
+\chapter{Introduction}
+
+\section{Background and Context}
+
+Blood banks and hospitals routinely face uncertainty in maintaining adequate blood availability. Current stock levels can be observed after the fact, but the short-term risk of an approaching shortage is rarely estimated in advance, and inventory records, hospital request data, and potential donor pools tend to exist in isolation from one another. This slows down coordination exactly when speed matters most. BloodLine is a Software Engineering project undertaken to close this gap by combining inventory tracking, near-term demand forecasting, shortage-risk detection, and donor matching into a single role-based platform.
+
+\subsection{Problem Statement}
+
+The specific pain points motivating this project are:
+
+\begin{itemize}
+\item \textbf{Reactive shortage management:} current stock can be monitored, but there is no systematic early warning for an approaching shortage.
+\item \textbf{Fragmented coordination:} inventory, hospital blood requests, and donor outreach are not unified into a single workflow.
+\item \textbf{Inefficient donor outreach:} identifying suitable donors by blood-group compatibility, availability, donation cooldown, and consent is otherwise manual and time-consuming.
+\end{itemize}
+
+\section{Project Objectives}
+
+\begin{enumerate}
+\item Provide role-based dashboards for donors, hospital coordinators, blood bank managers, inventory staff, medical staff, and system administrators.
+\item Track blood inventory by blood group and component with a full transaction history.
+\item Generate a short-term demand estimate from historical (currently synthetic) demand data.
+\item Detect and classify shortage risk (LOW / MODERATE / HIGH) using a transparent, explainable rule.
+\item Identify potential donor matches using compatibility, availability, consent, and cooldown rules.
+\item Support an end-to-end hospital blood-request workflow, from submission through manager review to inventory issue.
+\end{enumerate}
+
+This report documents the BloodLine implementation as it currently stands. It does not claim features, models, or metrics that are not present in the submitted source code; where a diagram or an earlier proposal describes something ahead of what is currently implemented, this is flagged explicitly rather than left unstated.
+
+% ==========================================================
+\chapter{Methodology and Design}
+
+\section{System Architecture}
+
+BloodLine is designed as a role-based, layered web application that integrates blood inventory management, hospital blood requests, donor management, demand forecasting, shortage-risk detection, medical screening, and reporting within a single system. The architecture separates the user-facing frontend, backend application services, and persistent database layer, allowing each component to perform a distinct responsibility while communicating through defined interfaces. The system supports six user roles -- Donor, Hospital Coordinator, Blood Bank Manager, Inventory Staff, Medical Staff, and System Administrator -- with access controlled according to their respective responsibilities. The following sections describe the overall architecture and its detailed data flows, interactions, and system behaviour.
+
+\subsection{High-Level Design}
+
+\needspace{11.5cm}
+BloodLine follows a simple layered architecture: six role-based user groups access a single-page web frontend over HTTP, which communicates with a FastAPI backend over a JSON REST API, which in turn reads and writes a SQLite database through a set of application-service modules (Figure 2.1).
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.87\textwidth]{images/fig_2_1_architecture.png}
+\caption{High-Level Architecture of the BloodLine System}
+\end{figure}
+
+\needspace{12cm}
+The Level 0 data flow diagram treats BloodLine as a single process exchanging data with the six external actors described above (Figure 2.2).
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.87\textwidth]{images/dfd0_new.jpeg}
+\caption{Level 0 Data Flow Diagram (Context Diagram)}
+\end{figure}
+
+\needspace{17cm}
+The Level 1 data flow diagram decomposes the system into six internal processes -- User Management, Blood Request Management, Inventory Management, Donor \& Screening Management, Demand Forecasting \& Risk Analysis, and Reporting \& Dashboards -- each reading from and writing to a grouping of the underlying database tables (Figure 2.3).
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.87\textwidth]{images/fig_2_3_dfd1.png}
+\caption{Level 1 Data Flow Diagram}
+\end{figure}
+
+\needspace{13cm}
+The use-case diagram groups functionality by the six implemented roles. Every role-specific use case requires authentication, and \textit{View Dashboard} and \textit{Update Profile} are common to all authenticated users (Figure 2.4).
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.87\textwidth]{images/usecase_new.jpeg}
+\caption{Use Case Diagram}
+\end{figure}
+
+\needspace{13cm}
+The UML class diagram below is drawn directly from the actual implemented SQLAlchemy schema and supersedes all earlier versions of this diagram. It reflects the 19 tables described in Section 2.2.2 and only the foreign-key relationships that are genuinely present in the models (Figure 2.5).
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.92\textwidth]{images/fig_2_5_uml.png}
+\caption{UML Class Diagram (Corrected, Based on Actual Database Schema)}
+\end{figure}
+
+\needspace{15cm}
+The activity diagram traces the hospital blood-request workflow -- the main integrated flow spanning the Hospital Coordinator, the BloodLine system, the Blood Bank Manager, and the inventory subsystem -- exactly as implemented. There is no separate persisted ``Approved'' status, and no notification is generated for this workflow (Figure 2.6).
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.87\textwidth]{images/fig_2_6_activity.png}
+\caption{Activity Diagram -- Hospital Blood Request Workflow}
+\end{figure}
+
+\needspace{13.5cm}
+The state diagram represents the blood-request lifecycle exactly as implemented: the stored \texttt{status} column only ever takes the value \texttt{pending}, \texttt{fulfilled}, \texttt{rejected}, or \texttt{cancelled}. An approval attempt made against insufficient stock is drawn as a self-loop on \textit{Pending}, since a note is appended but the status does not change (Figure 2.7).
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.87\textwidth]{images/fig_2_7_state.png}
+\caption{State Diagram -- Blood Request Lifecycle}
+\end{figure}
+
+\needspace{20cm}
+The sequence diagram covers the hospital request $\rightarrow$ approval $\rightarrow$ inventory-issue flow, including the rejected, sufficient-stock, and insufficient-stock alternative paths, using the actual endpoint and table names from the implemented code. There is no separate notification module in this workflow; the manager and the hospital coordinator each learn of a status change only by re-querying the relevant endpoint (Figure 2.8).
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.735\textwidth]{images/fig_2_8_sequence.png}
+\caption{Sequence Diagram -- Hospital Blood Request Workflow}
+\end{figure}
+
+\subsection{Technical Stack}
+
+The implemented stack, verified directly against the submitted source code, is summarised in Table 2.1.
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{p{2.7cm} p{4cm} p{6.5cm}}
+\toprule
+\textbf{Category} & \textbf{Technology / Tool} & \textbf{Purpose} \\
+\midrule
+Frontend & HTML, CSS, Vanilla JavaScript & Static web interface and client-side interaction \\
+Backend & Python, FastAPI & REST API and server-side application logic \\
+Database & SQLite & Persistent local data storage \\
+ORM & SQLAlchemy & Database access and object-relational mapping \\
+API & REST / JSON & Frontend--backend communication \\
+Authentication & Role-Based Access Control & Role-specific authorization \\
+Development & VS Code / Terminal & Development and local execution \\
+API Testing & FastAPI Swagger / OpenAPI & API testing and endpoint verification \\
+\bottomrule
+\end{tabular}
+\caption{Implemented technical stack}
+\end{table}
+
+The original project proposal envisaged a React with Tailwind CSS frontend and a PostgreSQL database. The current implementation instead uses a single vanilla HTML/CSS/JavaScript page and SQLite, so that the running prototype has no build toolchain and no external database service to configure during development and demonstration. Because the backend exposes a REST API, both substitutions can be made later without changing the API contract.
+
+\section{Implementation Details}
+
+\subsection{User Roles}
+
+Six roles are implemented with distinct permissions, enforced through a shared role-based access dependency on every protected API route: Donor, Hospital Coordinator, Blood Bank Manager, Inventory Staff, Medical Staff, and System Administrator.
+
+\subsection{Database Design}
+
+The implemented schema contains exactly 19 tables:
+
+\begin{enumerate}[itemsep=0pt]
+\item alerts
+\item blood\_banks
+\item blood\_requests
+\item blood\_units
+\item demand\_history
+\item donations
+\item donor\_availability
+\item donor\_notifications
+\item donors
+\item hospital\_users
+\item hospitals
+\item inventory
+\item inventory\_transactions
+\item predictions
+\item reports
+\item roles
+\item screening\_records
+\item staff
+\item user\_accounts
+\end{enumerate}
+
+The supported foreign-key relationships, verified against the SQLAlchemy models, are:
+
+\begin{itemize}[itemsep=0pt]
+\item user\_accounts.role\_id $\rightarrow$ roles.id
+\item donors.user\_id $\rightarrow$ user\_accounts.id
+\item donor\_availability.donor\_id $\rightarrow$ donors.id
+\item donations.donor\_id $\rightarrow$ donors.id
+\item donations.blood\_bank\_id $\rightarrow$ blood\_banks.id
+\item hospital\_users.user\_id $\rightarrow$ user\_accounts.id
+\item hospital\_users.hospital\_id $\rightarrow$ hospitals.id
+\item blood\_requests.hospital\_id $\rightarrow$ hospitals.id
+\item blood\_units.inventory\_id $\rightarrow$ inventory.id
+\item inventory.blood\_bank\_id $\rightarrow$ blood\_banks.id
+\item inventory\_transactions.inventory\_id $\rightarrow$ inventory.id
+\item demand\_history.blood\_bank\_id $\rightarrow$ blood\_banks.id
+\item predictions.blood\_bank\_id $\rightarrow$ blood\_banks.id
+\item screening\_records.donor\_id $\rightarrow$ donors.id
+\item screening\_records.performed\_by\_id $\rightarrow$ staff.id
+\item staff.user\_id $\rightarrow$ user\_accounts.id
+\item staff.blood\_bank\_id $\rightarrow$ blood\_banks.id
+\item donor\_notifications.donor\_id $\rightarrow$ donors.id
+\item donor\_notifications.alert\_id $\rightarrow$ alerts.id
+\item alerts.blood\_bank\_id $\rightarrow$ blood\_banks.id
+\item reports.generated\_by\_id $\rightarrow$ user\_accounts.id
+\end{itemize}
+
+Not every table is actively read from or written to by the current feature set: \texttt{donor\_availability}, \texttt{donor\_notifications}, and \texttt{reports} exist in the schema so that it will not need to change shape when the corresponding later-phase features (fine-grained availability windows, targeted push notifications, saved/exported reports) are built, but they are not yet populated by any implemented workflow.
+
+\subsection{Module 1: Core Functionality}
+
+\textbf{Role-based authentication.} Users authenticate against \texttt{user\_accounts}; every subsequent request is authorized against the caller's role.
+
+\textbf{Inventory management.} Current stock is tracked per blood bank, blood group, and component, with recorded transactions of type receipt, issue, expiry, and discard. Validation rejects zero, negative, or over-issue transaction quantities.
+
+\textbf{Synthetic demand generation.} Because granular real-world blood-bank consumption data is not available for this prototype, demand is generated synthetically by combining a blood-group baseline, a weekly pattern, a seasonal effect, a holiday/event bump, emergency spikes, and random noise. The generator produces 180 days of history across 8 blood groups, giving 1,440 synthetic demand records per seeded blood bank. Every such record is tagged as synthetic, and this is surfaced wherever the data is shown.
+
+\textbf{Demand forecasting.} The implemented forecasting approach does not use Prophet or SARIMA. Two candidate methods are computed: a 14-day naive baseline, and Simple Exponential Smoothing (SES) with $\alpha = 0.3$. A rolling-origin backtest over a recent holdout window computes the Mean Absolute Error (MAE) of both candidates, and the lower-MAE model is selected and reported alongside both MAE values.
+
+\textbf{Shortage-risk detection.} A transparent rule layer, not a black-box classifier, computes:
+
+\[
+\text{shortfall} = \text{predicted demand} - \text{current stock}
+\]
+
+\begin{itemize}[itemsep=0pt]
+\item LOW if shortfall $\leq$ 0
+\item MODERATE if shortfall is positive and $\leq$ 25\% of current stock
+\item HIGH if shortfall is greater than 25\% of current stock, or if current stock is zero while predicted demand is positive
+\end{itemize}
+
+\subsection{Module 2: Secondary Features}
+
+\textbf{Donor matching.} Candidates are filtered by blood-group compatibility, availability, notification consent, and a 90-day donation cooldown, then ranked by a simple additive score. The module only surfaces potential matches: it does not provide medical clearance, and the final medical decision remains with medical staff.
+
+\textbf{Hospital blood request workflow.} A Hospital Coordinator submits a request (blood group, component, quantity, urgency, notes), which enters the pending state. A Blood Bank Manager then approves or rejects it. On approval with sufficient stock, inventory is deducted, an issue transaction is recorded, and the request becomes fulfilled. On approval with insufficient stock, the request remains pending and an insufficient-stock note is appended to the request; there is no separate persisted status such as ``Approved -- Insufficient Stock''. On rejection, the request becomes rejected.
+
+\textbf{Medical screening.} Medical staff can view a worklist of eligible donors, record a screening outcome, and view a donor's screening history. Every screening record is tied to a specific staff member.
+
+\textbf{Reporting and dashboards.} Reports aggregate inventory transactions and rerun the forecast/risk functions to produce live summaries; these are computed on read rather than persisted.
+
+\textbf{In-app notifications.} Notifications are surfaced within the application UI only; no external push-notification service is integrated.
+
+\subsection{Dashboard}
+
+\textbf{Dashboard.} The Blood Bank Manager dashboard provides a consolidated view of the current operational state of the system. It presents inventory information by blood group, shortage-risk indicators, demand and forecast information, pending hospital requests, and relevant operational summaries. The dashboard obtains these summaries from the implemented inventory, forecasting, risk-analysis, and request-management functionality, allowing the manager to review the current situation from a single interface. Reports and dashboard summaries are computed from current system data rather than relying on separately persisted report results.
+
+\needspace{12cm}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.87\textwidth]{images/fig_2_9_dashboard.jpeg}
+\caption{Blood Bank Manager Dashboard}
+\end{figure}
+
+% ==========================================================
+\chapter{Results and Evaluation}
+
+\section{Testing Methodology}
+
+At this stage, testing is functional rather than performance-based:
+
+\begin{itemize}
+\item \textbf{Manual functional testing:} every role was logged into and every implemented page/action was exercised against seeded demo data.
+\item \textbf{Boundary/validation testing:} inventory transactions were tested with zero, negative, and over-issue quantities to confirm they are rejected.
+\item \textbf{Workflow testing:} the full hospital-request path (submit $\rightarrow$ approve/reject $\rightarrow$ inventory issue) was exercised for both the sufficient-stock and insufficient-stock cases.
+\end{itemize}
+
+No dedicated automated integration test suite or load/performance testing has been carried out at this stage; this is noted honestly rather than represented as complete.
+
+\section{Performance Metrics}
+
+No accuracy, precision/recall, response-time, throughput, or uptime figures are reported here, as no such measurements currently exist for this prototype. Table 3.1 instead reports functional verification against the implemented behaviour, which is the meaningful measure of progress at this stage.
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{p{10.5cm} l}
+\toprule
+\textbf{Verified Behaviour} & \textbf{Status} \\
+\midrule
+Login succeeds for all six roles with correct permission scoping & Verified \\
+Inventory receipt/issue/expiry/discard transactions update stock correctly & Verified \\
+Invalid (zero, negative, over-issue) transaction quantities are rejected & Verified \\
+180-day synthetic demand series generated per blood group, labelled synthetic & Verified \\
+Forecast generated with baseline and SES candidates, both MAE values reported & Verified \\
+Shortage risk classified LOW/MODERATE/HIGH with plain-language explanation & Verified \\
+Donor matching returns ranked, compatible, cooldown-cleared candidates & Verified \\
+Hospital request submission appears in manager's pending queue & Verified \\
+Approval with sufficient stock deducts inventory and marks request fulfilled & Verified \\
+Approval with insufficient stock keeps request pending with a note & Verified \\
+Screening outcome persists and reflects immediately in worklist/history & Verified \\
+Reports display live-computed inventory, risk, and request summaries & Verified \\
+\bottomrule
+\end{tabular}
+\caption{Functional verification summary against the implemented prototype}
+\end{table}
+
+\section{Analysis}
+
+The six objectives stated in Section 1.2 each have at least a working implementation: role-based dashboards, inventory tracking, demand estimation, shortage-risk classification, donor matching, and the end-to-end hospital request workflow are all functional against seeded demo data. The main gap between the original proposal and the current build is the fidelity of individual components rather than missing functionality -- the forecasting model, frontend framework, and database engine are all simpler than originally scoped, by deliberate engineering choice (Section 4.3). A notable implementation detail was keeping the manager approval path correct under partial stock: this is handled by leaving the request in a clearly-flagged pending state with a note, rather than either silently failing or incorrectly marking it fulfilled.
+
+% ==========================================================
+\chapter{Conclusion}
+
+\section{Summary of Work}
+
+BloodLine, as currently implemented, covers all six user roles, inventory management with transaction validation, synthetic demand generation, a transparent forecasting and shortage-risk pipeline, rule-based donor matching, and an end-to-end hospital blood-request workflow tying inventory, approvals, and screening together.
+
+\section{Key Findings}
+
+\begin{itemize}
+\item A simple, auditable forecasting approach (naive baseline versus SES, chosen by backtested MAE) is sufficient to drive a working shortage-risk pipeline without requiring Prophet or SARIMA at this stage.
+\item Keeping the frontend as a single vanilla-JavaScript page removes an entire class of build/deployment risk, at no cost to the API design.
+\item Modelling the full 19-table schema up front meant that later features (hospital requests, screening, administration) were additive, requiring no schema migrations or breaking changes.
+\end{itemize}
+
+\section{Future Work and Recommendations}
+
+\begin{itemize}
+\item Evaluate Prophet or SARIMA (or another stronger model) against the current naive/SES baseline.
+\item Implement targeted donor push notifications (the \texttt{donor\_notifications} table exists but is not yet wired into any workflow).
+\item Add a regional, multi-bank surplus and redistribution view using the existing donor/blood-bank location fields.
+\item Support finer-grained donor availability windows in place of the current on/off toggle.
+\item Migrate from SQLite to a managed PostgreSQL database for production use.
+\item Harden the deployment pipeline with CI/CD.
+\item Add saved/exportable PDF reports (the \texttt{reports} table exists but reports are currently computed live rather than persisted).
+\item Pursue authorized integration with real-world blood-demand data to replace the synthetic generator.
+\item Consider real-world deployment requirements, including data protection and access-control auditing appropriate to healthcare data.
+\end{itemize}
+
+\section{Final Remarks}
+
+The implementation intentionally keeps its current scope honest against the original proposal: synthetic data is clearly labelled, an interpretable forecasting/risk approach is used in place of an unimplemented model, and deployment, notification, and regional-redistribution features are deferred to future iterations. This gives a working, demonstrable system to build on for the remainder of the course, with a clear and documented path to the originally proposed feature set.
+
+% ==========================================================
+\clearpage
+\addcontentsline{toc}{chapter}{Bibliography}
+\begin{thebibliography}{Hyndman21}
+
+\bibitem[Pres14]{Pres14} R. S. Pressman and B. R. Maxim, \textit{Software Engineering: A Practitioner's Approach}, 8th ed. McGraw-Hill Education, 2014.
+
+\bibitem[Somm16]{Somm16} I. Sommerville, \textit{Software Engineering}, 10th ed. Pearson, 2016.
+
+\bibitem[FastAPI]{FastAPI} FastAPI Documentation. \url{https://fastapi.tiangolo.com/}.
+
+\bibitem[SQLAlch]{SQLAlch} SQLAlchemy Documentation. \url{https://docs.sqlalchemy.org/}.
+
+\bibitem[SQLite]{SQLite} SQLite Documentation. \url{https://www.sqlite.org/docs.html}.
+
+\bibitem[Hyndman21]{Hyndman21} R. J. Hyndman and G. Athanasopoulos, \textit{Forecasting: Principles and Practice}, 3rd ed. OTexts, 2021.
+
+\bibitem[Gardner85]{Gardner85} E. S. Gardner Jr., ``Exponential Smoothing: The State of the Art,'' \textit{Journal of Forecasting}, vol. 4, no. 1, pp. 1--28, 1985.
+
+\bibitem[WHO17]{WHO17} World Health Organization, \textit{Blood Donor Selection: Guidelines on Assessing Donor Suitability for Blood Donation}, WHO Press, 2012.
+
+\end{thebibliography}
+
+\end{document}
