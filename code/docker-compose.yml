@@ -1,0 +1,38 @@
+# Local/staging stack: PostgreSQL + API + static frontend.
+#   cp .env.example .env   (edit secrets)   then:   docker compose up --build
+#   docker compose exec api python -m app.seed     # load demo data (synthetic)
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: bloodline
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: bloodline
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bloodline"]
+      interval: 5s
+      retries: 10
+  api:
+    build: ./backend
+    image: ${API_IMAGE:-bloodline-api:local}   # staging sets API_IMAGE to the published image
+    environment:
+      DATABASE_URL: postgresql+psycopg2://bloodline:${POSTGRES_PASSWORD}@db:5432/bloodline
+      BLOODLINE_SECRET_KEY: ${BLOODLINE_SECRET_KEY:?set BLOODLINE_SECRET_KEY in .env}
+      BLOODLINE_ENV: production
+      BLOODLINE_USE_MIGRATIONS: "1"
+      BLOODLINE_DEMO_TOOLS: "0"   # scenario tools change stock; keep off outside demos
+      BLOODLINE_DEMO_LOGIN: "0"   # the demo-account picker is unauthenticated; keep it off outside local demos
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@example.com}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8080}
+    depends_on:
+      db: {condition: service_healthy}
+    ports: ["8000:8000"]
+  web:
+    image: nginx:alpine
+    volumes: ["./frontend:/usr/share/nginx/html:ro"]
+    ports: ["8080:80"]
+volumes:
+  pgdata:
