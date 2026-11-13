@@ -1,0 +1,48 @@
+# Continuous delivery to staging. Runs CI first, publishes the API image to GitHub Container Registry,
+# then (only if the secrets below exist) deploys it over SSH. Without those secrets it stops after publishing.
+#
+# Repository secrets for the SSH deploy step:
+#   STAGING_HOST, STAGING_USER, STAGING_SSH_KEY   and optionally STAGING_PATH (default /opt/bloodline)
+# On the staging server: Docker + compose, code/docker-compose.yml from this repo and a .env (see .env.example).
+name: BloodLine deploy to staging
+on:
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+jobs:
+  ci:
+    uses: ./.github/workflows/bloodline-ci.yml
+  publish:
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions: {contents: read, packages: write}
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: meta
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY,,}/bloodline-api:${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+      - run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - run: docker build -t "${{ steps.meta.outputs.image }}" ./code/backend && docker push "${{ steps.meta.outputs.image }}"
+  deploy:
+    needs: publish
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      STAGING_HOST: ${{ secrets.STAGING_HOST }}
+    steps:
+      - name: Deploy over SSH
+        if: env.STAGING_HOST != ''
+        env:
+          STAGING_USER: ${{ secrets.STAGING_USER }}
+          STAGING_SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+          STAGING_PATH: ${{ secrets.STAGING_PATH }}
+          IMAGE: ${{ needs.publish.outputs.image }}
+        run: |
+          install -m 600 /dev/null key && printf '%s\n' "$STAGING_SSH_KEY" > key
+          ssh -i key -o StrictHostKeyChecking=accept-new "$STAGING_USER@$STAGING_HOST" \
+            "cd ${STAGING_PATH:-/opt/bloodline} && export API_IMAGE='$IMAGE' && docker login ghcr.io >/dev/null 2>&1 || true; \
+             docker compose pull api && docker compose up -d --no-build"
+      - name: No staging host configured
+        if: env.STAGING_HOST == ''
+        run: echo "Image published. Set STAGING_HOST/STAGING_USER/STAGING_SSH_KEY secrets to enable the SSH deploy."

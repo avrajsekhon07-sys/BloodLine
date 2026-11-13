@@ -18,6 +18,8 @@ Demand(day) = baseline + weekly_pattern + seasonal_effect + emergency_spike + no
   local emergencies) injected at low probability.
 - noise: bounded Gaussian noise so no two days are identical.
 """
+import zlib
+
 import numpy as np
 import pandas as pd
 
@@ -31,7 +33,7 @@ HOLIDAY_DOYS = [1, 50, 100, 150, 200, 250, 300, 350]  # illustrative recurring s
 
 def generate_demand_series(blood_group: str, start_date: str, days: int = 180, seed: int = None) -> pd.DataFrame:
     """Return a DataFrame with columns [date, units_demanded] of synthetic demand."""
-    rng = np.random.default_rng(seed if seed is not None else abs(hash(blood_group)) % (2**32))
+    rng = np.random.default_rng(seed if seed is not None else zlib.crc32(blood_group.encode()) % (2**32))
     dates = pd.date_range(start=start_date, periods=days, freq="D")
     baseline = BLOOD_GROUP_BASELINE.get(blood_group, 8.0)
 

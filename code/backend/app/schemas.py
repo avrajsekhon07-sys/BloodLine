@@ -68,6 +68,12 @@ class ForecastOut(BaseModel):
     baseline_units: float
     baseline_model_name: str
     improvement_over_baseline_pct: Optional[float]
+    mae_baseline: Optional[float] = None
+    mae_candidate: Optional[float] = None
+    rmse_baseline: Optional[float] = None
+    rmse_candidate: Optional[float] = None
+    backtest_days: Optional[int] = None
+    candidates: Optional[List[dict]] = None  # every model compared: name, mae, rmse, predicted_units, selected
 
 
 class RiskOut(BaseModel):
@@ -91,6 +97,7 @@ class DonorMatchOut(BaseModel):
     notification_consent: bool
     match_score: float
     reasons: List[str]
+    distance_km: Optional[float] = None
 
 
 # ---- Blood requests (hospital <-> manager) ----
@@ -205,3 +212,94 @@ class ReportsSummaryOut(BaseModel):
     forecast_summary: dict  # blood_group -> 7-day predicted units
     inventory_by_group: dict  # blood_group -> current stock
     requests_summary: dict  # status -> count
+
+
+# ---------------------------------------------------------------------------
+# Added after W6: registration, admin, donations, notifications, risk history
+# ---------------------------------------------------------------------------
+class RegisterDonorRequest(BaseModel):
+    full_name: str
+    email: EmailStr
+    password: str
+    blood_group: str
+    notification_consent: bool = False
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
+
+class AdminUserCreate(BaseModel):
+    full_name: str
+    email: EmailStr
+    password: str
+    role: str
+    blood_bank_id: Optional[str] = None  # staff roles (default: first bank)
+    hospital_id: Optional[str] = None    # hospital_coordinator (default: first hospital)
+    blood_group: Optional[str] = None    # donor
+
+
+class AdminUserUpdate(BaseModel):
+    is_active: Optional[bool] = None
+    role: Optional[str] = None
+
+
+class AuditLogOut(BaseModel):
+    id: str
+    created_at: datetime
+    user_name: Optional[str]
+    action: str
+    detail: Optional[str]
+
+
+class DonationCreate(BaseModel):
+    donor_id: str
+    units_collected: int = 1
+    blood_bank_id: Optional[str] = None
+    donation_date: Optional[date] = None
+
+
+class DonationRecordedOut(BaseModel):
+    id: str
+    donor_id: str
+    donor_name: str
+    blood_group: str
+    units_collected: int
+    donation_date: date
+    new_stock: Optional[int] = None
+
+
+class ReadyDonorOut(BaseModel):
+    donor_id: str
+    full_name: str
+    blood_group: str
+    screened_at: datetime
+
+
+class OutreachRequest(BaseModel):
+    blood_group: str
+    message: Optional[str] = None
+    radius_km: Optional[float] = None
+
+
+class OutreachOut(BaseModel):
+    matched: int
+    notified: int
+    skipped_recently_notified: int
+    pushed: int = 0  # browser push messages delivered (0 when push isn't configured)
+    push_failed: int = 0
+    push_no_subscription: int = 0
+
+
+class NotificationOut(BaseModel):
+    id: str
+    message: str
+    sent_at: datetime
+    was_read: bool
+
+
+class AlertHistoryOut(BaseModel):
+    created_at: datetime
+    blood_group: str
+    risk_level: str
+    current_stock: int
+    predicted_demand: float
+    shortfall: float

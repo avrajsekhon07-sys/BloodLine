@@ -327,3 +327,26 @@ class Report(Base):
     generated_by_id = Column(String, ForeignKey("user_accounts.id"), nullable=False)
     content_json = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class AuditLog(Base):
+    """Basic activity log (FR-ADM-2): logins, stock changes, admin and workflow actions."""
+    __tablename__ = "audit_logs"
+    id = Column(String, primary_key=True, default=gen_id)
+    user_id = Column(String, ForeignKey("user_accounts.id"), nullable=True)
+    action = Column(String, nullable=False, index=True)
+    detail = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    user = relationship("UserAccount")
+
+
+class PushSubscription(Base):
+    """Browser Web Push subscription for a donor (FR-NOTE-1 push channel)."""
+    __tablename__ = "push_subscriptions"
+    id = Column(String, primary_key=True, default=gen_id)
+    user_id = Column(String, ForeignKey("user_accounts.id"), nullable=False, index=True)
+    endpoint = Column(String, unique=True, nullable=False)
+    p256dh = Column(String, nullable=False)
+    auth = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
