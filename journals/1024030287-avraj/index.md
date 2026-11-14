@@ -23,6 +23,11 @@ The work included:
 - Shortfall calculation
 - LOW/MODERATE/HIGH shortage-risk classification
 - Integration of forecasting and risk results with the BloodLine application
+- Completion of backend features (donation recording, account management, activity log, notifications)
+- Unit expiry tracking and the multi-bank regional view
+- Role-based dashboard interface, Evaluation page and what-if scenarios
+- Login rate limiting
+- CI workflow and repository setup
 
 ## Weekly Journal
 
@@ -33,3 +38,9 @@ The work included:
 - [Week 5 — Forecast Evaluation](w5-forecast-evaluation.md)
 - [Week 6 — Shortage Risk Detection](w6-shortage-risk.md)
 - [Week 7 — Integration & Testing](w7-integration-testing.md)
+- [Week 8 — Forecasting Model Research](w8-forecasting-model-research.md)
+- [Week 9 — Requirements (SRS)](w9-requirements-srs.md)
+- [Week 10 — Evaluation and Matching Design](w10-evaluation-and-matching-design.md)
+- [Week 11 — Integration and Delivery Planning](w11-integration-and-delivery-planning.md)
+- [Week 12 — Backend Completion and UI](w12-backend-completion-and-ui.md)
+- [Week 13 — Evaluation, Security and Git/CI](w13-evaluation-security-and-git.md)
