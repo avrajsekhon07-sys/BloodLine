@@ -1,6 +1,6 @@
 import datetime as dt
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
 from app import auth, bootstrap_demo, models
@@ -31,8 +31,17 @@ def _isolated_db(tmp_path, monkeypatch):
 
 def test_demo_bootstrap_adds_exact_synthetic_fixtures_and_is_idempotent(tmp_path, monkeypatch):
     engine, sessions, original_hash, original_id = _isolated_db(tmp_path, monkeypatch)
+    demand_selects = []
+
+    def count_demand_selects(connection, cursor, statement, parameters, context, executemany):
+        if statement.lstrip().lower().startswith("select") and "demand_history" in statement.lower():
+            demand_selects.append(statement)
+
+    event.listen(engine, "before_cursor_execute", count_demand_selects)
     first = bootstrap_demo.bootstrap_demo_database(today=dt.date(2026, 1, 1))
+    event.remove(engine, "before_cursor_execute", count_demand_selects)
     second = bootstrap_demo.bootstrap_demo_database(today=dt.date(2026, 1, 1))
+    assert len(demand_selects) == 1
     assert first == {"users": 20, "donors": 15, "banks": 3, "inventory": 24, "demand": 4320, "requests": 3}
     assert second == {"users": 0, "donors": 0, "banks": 0, "inventory": 0, "demand": 0, "requests": 0}
 

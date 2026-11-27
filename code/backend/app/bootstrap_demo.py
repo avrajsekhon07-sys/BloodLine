@@ -13,6 +13,7 @@ import os
 import random
 import secrets
 
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 from . import auth, models
@@ -98,6 +99,9 @@ def bootstrap_demo_database(today=None):
     db = SessionLocal()
     counts = {"users": 0, "donors": 0, "banks": 0, "inventory": 0, "demand": 0, "requests": 0}
     try:
+        if db.bind.dialect.name == "postgresql":
+            db.execute(text("SET LOCAL lock_timeout = '5s'"))
+            db.execute(text("SET LOCAL statement_timeout = '60s'"))
         for role in models.RoleName:
             _role(db, role)
         bank_rows = [_demo_bank(db, spec, counts) for spec in BANKS]
@@ -145,6 +149,20 @@ def bootstrap_demo_database(today=None):
 
         start = today - dt.timedelta(days=179)
         all_series = generate_all_groups(str(start), days=180)
+        bank_ids = [bank.id for bank, _, _ in bank_rows]
+        existing_demand_keys = {
+            (bank_id, blood_group.value if hasattr(blood_group, "value") else blood_group,
+             demand_date.date() if isinstance(demand_date, dt.datetime) else demand_date)
+            for bank_id, blood_group, demand_date in db.query(
+                models.DemandHistory.blood_bank_id,
+                models.DemandHistory.blood_group,
+                models.DemandHistory.date,
+            ).filter(
+                models.DemandHistory.blood_bank_id.in_(bank_ids),
+                models.DemandHistory.date >= start,
+                models.DemandHistory.date <= today,
+            ).all()
+        }
         for bank, scale, overrides in bank_rows:
             for bg in blood_groups:
                 slot = db.query(models.Inventory).filter_by(
@@ -160,14 +178,14 @@ def bootstrap_demo_database(today=None):
                     _seed_units(db, slot, today, rng)
                     counts["inventory"] += 1
                 for row in all_series[bg].itertuples(index=False):
-                    exists = db.query(models.DemandHistory.id).filter_by(
-                        blood_bank_id=bank.id, blood_group=bg, date=row.date,
-                    ).first()
-                    if exists is None:
+                    demand_date = row.date.date() if isinstance(row.date, dt.datetime) else row.date
+                    key = (bank.id, bg, demand_date)
+                    if key not in existing_demand_keys:
                         db.add(models.DemandHistory(
-                            blood_bank_id=bank.id, blood_group=bg, date=row.date,
+                            blood_bank_id=bank.id, blood_group=bg, date=demand_date,
                             units_demanded=round(float(row.units_demanded) * scale, 1), is_synthetic=True,
                         ))
+                        existing_demand_keys.add(key)
                         counts["demand"] += 1
 
         request_specs = (
