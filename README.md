@@ -4,6 +4,8 @@
 
 BloodLine is a role based blood bank management and decision support application. It combines inventory workflows with short term demand forecasts, explainable shortage flags, donor suggestions and multi bank summaries. The backend is a FastAPI and SQLAlchemy service; the frontend is a static HTML, CSS and JavaScript application with no build step. Demand history is synthetic. Forecasts and donor matches are operational aids, not validated clinical predictions or medical eligibility decisions.
 
+> **Live deployment:** <https://bloodline-avrajsekhon-ui.onrender.com> (frontend) · API docs: <https://bloodline-avrajsekhon-api.onrender.com/docs>. Hosted on Render's free tier with a Neon PostgreSQL database, so the first visit after a period of inactivity can take about a minute while the service wakes up.
+
 > **Data and safety note:** Seeded demand is synthetic/simulated. Donor matching only recommends candidates to authorized staff. Staff perform screening and make eligibility decisions; transfers between banks are suggestions requiring human approval.
 
 ## Contents
@@ -16,7 +18,8 @@ BloodLine is a role based blood bank management and decision support application
 - [Forecasting and shortage risk](#forecasting-and-shortage-risk)
 - [Donor matching](#donor-matching)
 - [Data and backend](#data-and-backend)
-- [Run locally](#run-locally)
+- [Deployment](#deployment)
+- [Local development](#local-development)
 - [Configuration](#configuration)
 - [Docker](#docker)
 - [API and tests](#api-and-tests)
@@ -47,7 +50,7 @@ The objectives are to:
 | Risk | Per blood group LOW/MODERATE/HIGH flags, explanations and alert history |
 | Donors | Compatibility filtering, availability, consent, 90 day cooldown, optional radius and ranked match reasons |
 | Screening | Candidate worklist and human entered eligible/deferred/rejected records |
-| Regional view | Multiple bank stock/risk overview and redistribution suggestions requiring human approval |
+| Regional view | Multiple bank stock/risk overview, interactive OpenStreetMap bank map with a shortage heatmap filterable by blood group (Leaflet), and redistribution suggestions requiring human approval |
 | Reports and evaluation | Inventory/request summaries, forecast and risk evaluation, matching rule checks; browser print-to-PDF |
 | Notifications | In-app notifications and optional Web Push when VAPID is configured |
 | Demo tools | Read-only demand what-if view and optional simulated stock scenario endpoints |
@@ -119,9 +122,21 @@ This is a candidate contact list, not a medical clearance. The application recor
 
 FastAPI routers depend on shared SQLAlchemy sessions from `database.py`. Models are defined in `models.py`; Pydantic schemas validate route input and output. SQLite at `./bloodline.db` is the default. Set `DATABASE_URL` to a PostgreSQL SQLAlchemy URL to use PostgreSQL. In local mode, `main.py` calls `Base.metadata.create_all`; set `BLOODLINE_USE_MIGRATIONS=1` to leave schema setup to Alembic. The provided `0001_baseline` revision creates current model metadata but does not create roles or users. Run the additive `python -m app.bootstrap` command after migrations to initialize the first administrator and synthetic planning data; it does not remove or modify existing application data.
 
-## Run locally
+## Deployment
 
-Requirements: Python 3.12 or a compatible Python release. No Node.js installation or frontend build is required.
+BloodLine is deployed on [Render](https://render.com) from the `master` branch:
+
+| Component | Render service | URL |
+|---|---|---|
+| Frontend | Static Site (`code/frontend`, built with `python build_static.py`) | <https://bloodline-avrajsekhon-ui.onrender.com> |
+| API | Docker Web Service (`code/backend`) | <https://bloodline-avrajsekhon-api.onrender.com> ([docs](https://bloodline-avrajsekhon-api.onrender.com/docs), [health](https://bloodline-avrajsekhon-api.onrender.com/health)) |
+| Database | Neon PostgreSQL | private `DATABASE_URL` set in Render |
+
+Pushes to `master` redeploy both services. The free tier sleeps after about 15 minutes without traffic, so the first request afterwards is slow. Setup, environment variables and the one-time database bootstrap are documented in the [Render deployment runbook](docs/deployment-render.md). The regional map loads Leaflet from cdnjs and map tiles from OpenStreetMap; without internet access it falls back to a simple relative-position diagram.
+
+## Local development
+
+To run your own copy for development. Requirements: Python 3.12 or a compatible Python release. No Node.js installation or frontend build is required.
 
 ```bash
 cd code/backend
@@ -215,7 +230,7 @@ Tests are in `code/backend/tests/`; API tests use a temporary database fixture. 
 - Login rate limiting is in memory, so it resets on process restart and is not shared across workers.
 - The frontend is a static single page application without a JavaScript package manager; its API origin comes from `config.js`, with a small Python build script for production static hosting.
 - Redistributable stock recommendations require staff approval and execution outside the application.
-- Web Push, a public staging deployment and production PostgreSQL operation require environment credentials and infrastructure; these are not demonstrated by local source alone.
+- Web Push requires VAPID credentials and is not enabled in the public deployment. The public deployment runs on free-tier hosting and is a demonstration, not a production service.
 - The baseline Alembic revision creates current metadata as a convenience; future model changes should use explicit migration revisions.
 
 Reasonable next steps include testing with governed, de-identified operational data; component aware matching rules reviewed by domain experts; shared rate limiting for multi worker deployment; deployment hardening and monitoring; and richer forecast evaluation across data splits and seasonal periods.
