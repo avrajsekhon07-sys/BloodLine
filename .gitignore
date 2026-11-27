@@ -473,3 +473,10 @@ vapid.sh
 .DS_Store
 node_modules/
 .ruff_cache/
+# BloodLine local artifacts (merged with the original repository rules)
+.env.*
+!.env.example
+*.sqlite
+*.sqlite3
+*.db-*
+*.sqlite-*

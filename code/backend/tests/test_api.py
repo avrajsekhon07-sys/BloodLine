@@ -74,8 +74,17 @@ def test_donation_requires_eligible_screening_then_updates_stock(client):
     body = {"donor_id": cand["donor_id"], "units_collected": 1}
     assert client.post("/donations", headers=inv_h, json=body).status_code == 400  # not screened yet
     assert client.post("/screening", headers=scr_h, json={"donor_id": cand["donor_id"], "outcome": "eligible"}).status_code in (200, 201)
-    bank = client.get("/auth/me", headers=inv_h).json()["blood_bank_id"]  # the donation goes to the staff member's own bank
-    before = {i["blood_group"]: i["quantity_units"] for i in client.get(f"/inventory?blood_bank_id={bank}", headers=inv_h).json() if i["component"] == "whole_blood"}
+    # The seed contains three banks; donation recording defaults to the staff
+    # member's assigned bank, so compare stock within that bank only.
+    bank_id = next(
+        b["id"] for b in client.get("/regional/banks", headers=inv_h).json()
+        if b["name"] == "Patiala Central Blood Bank"
+    )
+    before = {
+        i["blood_group"]: i["quantity_units"]
+        for i in client.get(f"/inventory?blood_bank_id={bank_id}", headers=inv_h).json()
+        if i["component"] == "whole_blood"
+    }
     r = client.post("/donations", headers=inv_h, json=body)
     assert r.status_code == 201, r.text
     assert r.json()["new_stock"] == before.get(cand["blood_group"], 0) + 1
