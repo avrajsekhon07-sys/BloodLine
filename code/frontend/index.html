@@ -79,7 +79,7 @@ input[type=checkbox]{accent-color:var(--btn)}.alert a{color:var(--pri)}
 </style></head><body><div id="app"></div><div id="toast" role="status" aria-live="polite"></div>
 <script src="config.js"></script><script src="viz.js"></script>
 <script>
-const DEMO=window.BLOODLINE_CONFIG?.demoMode===true;
+let DEMO=window.BLOODLINE_CONFIG?.demoMode===true; // also switched on below when the API reports demo logins enabled
 const API=localStorage.getItem("bl_api")||window.BLOODLINE_CONFIG?.apiUrl||(location.hostname==="localhost"||location.hostname==="127.0.0.1"?"http://localhost:8000":""),BG=["A+","A-","B+","B-","AB+","AB-","O+","O-"],LOW=15;
 const $=(s,r=document)=>r.querySelector(s),esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const pill=(t,c)=>`<span class="p ${c??t}">${esc(t)}</span>`,fmt=d=>d?new Date(d).toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short"}):"—",nm=s=>String(s).replace(/_/g," ");
@@ -265,6 +265,6 @@ function palette(){const items=[...(NAV[S.role]||[]).map(n=>({t:"Go to "+n[1],a:
  d.onclick=e=>{const p=e.target.closest(".pi");if(p)run(+p.dataset.k);else if(e.target==d)d.close()};d.onclose=()=>d.remove();draw()}
 addEventListener("keydown",e=>{if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()=="k"&&S.token){e.preventDefault();if(!$(".pal"))palette()}});
 addEventListener("hashchange",render);addEventListener("click",()=>{const b=$("#bb");if(b)b.hidden=true});
-document.addEventListener("DOMContentLoaded",render);
+document.addEventListener("DOMContentLoaded",async()=>{if(!DEMO){try{DEMO=(await fetch(API+"/auth/demo-accounts")).ok}catch(e){}if(DEMO){NAV.blood_bank_manager=M;NAV.system_admin=[...M,["admin","Admin"]]}}render()});
 </script>
 <script src="ml-pages.js"></script></body></html>
