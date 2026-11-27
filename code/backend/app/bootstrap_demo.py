@@ -43,8 +43,10 @@ HOSPITAL_NAME = "Rajindra Government Hospital"
 
 def _role(db, role_name):
     role = db.query(models.Role).filter(models.Role.name == role_name).first()
-    if role is None:
-        raise RuntimeError("Roles are missing; run `alembic upgrade head` and `python -m app.bootstrap` first.")
+    if role is None:  # fresh database: create the role additively, as app.bootstrap does
+        role = models.Role(name=role_name)
+        db.add(role)
+        db.flush()
     return role
 
 
