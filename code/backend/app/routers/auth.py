@@ -58,7 +58,7 @@ def register_donor(payload: schemas.RegisterDonorRequest, db: Session = Depends(
         raise HTTPException(400, "An account with this email already exists")
     role = db.query(models.Role).filter(models.Role.name == models.RoleName.DONOR).first()
     if role is None:
-        raise HTTPException(400, "Roles are not set up — run the seed script first.")
+        raise HTTPException(400, "Roles are not set up — run `python -m app.bootstrap` first.")
 
     user = models.UserAccount(
         email=payload.email,

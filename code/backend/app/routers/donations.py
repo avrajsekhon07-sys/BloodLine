@@ -87,7 +87,7 @@ def record_donation(
         staff = user.staff_profile
         bank = db.query(models.BloodBank).filter(models.BloodBank.id == staff.blood_bank_id).first() if staff else db.query(models.BloodBank).first()
         if bank is None:
-            raise HTTPException(400, "No blood bank found — run the seed script first.")
+            raise HTTPException(400, "No blood bank found — run `python -m app.bootstrap` first.")
         bank_id = bank.id
 
     donation = models.Donation(

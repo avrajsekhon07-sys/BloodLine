@@ -27,7 +27,7 @@ def get_forecast(
         .all()
     )
     if len(rows) < 20:
-        raise HTTPException(400, "Not enough demand history to forecast (need at least 20 days). Run the seed script.")
+        raise HTTPException(400, "Not enough demand history to forecast (need at least 20 days). Run the safe `python -m app.bootstrap` command to add synthetic demand history.")
 
     df = pd.DataFrame([{"date": r.date, "units_demanded": r.units_demanded} for r in rows])
     result = forecast_demand(df, horizon_days=horizon_days)

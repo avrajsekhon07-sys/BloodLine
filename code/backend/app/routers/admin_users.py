@@ -24,7 +24,7 @@ def _role(db: Session, name: str) -> models.Role:
         raise HTTPException(400, "role must be one of: " + ", ".join(r.value for r in models.RoleName))
     role = db.query(models.Role).filter(models.Role.name == rn).first()
     if role is None:
-        raise HTTPException(400, "Roles are not set up — run the seed script first.")
+        raise HTTPException(400, "Roles are not set up — run `python -m app.bootstrap` first.")
     return role
 
 

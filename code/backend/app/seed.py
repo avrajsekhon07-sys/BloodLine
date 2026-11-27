@@ -1,19 +1,20 @@
 """
 Seed the local SQLite DB with demo data for the W5 walkthrough.
 
-Run with:  python -m app.seed
+Run only against disposable local SQLite with: BLOODLINE_ALLOW_DESTRUCTIVE_SEED=1 python -m app.seed
 """
 import datetime as dt
+import getpass
+import os
 import random
 
-from .database import Base, engine, SessionLocal
+from .database import Base, engine, SessionLocal, DATABASE_URL
 from . import models, auth
 from .services import units as units_svc
 from .services.synthetic_data import generate_all_groups, BLOOD_GROUP_BASELINE
 
 random.seed(42)
 
-DEMO_PASSWORD = "bloodline123"  # same for every demo account, printed at the end
 
 
 def _seed_units(db, inv, today):
@@ -26,6 +27,15 @@ def _seed_units(db, inv, today):
 
 
 def run():
+    if os.getenv("BLOODLINE_ENV") == "production":
+        raise RuntimeError("The destructive demo seed is disabled in production.")
+    if not DATABASE_URL.startswith("sqlite:"):
+        raise RuntimeError("The destructive demo seed only supports local SQLite databases.")
+    if os.getenv("BLOODLINE_ALLOW_DESTRUCTIVE_SEED") != "1":
+        raise RuntimeError("Set BLOODLINE_ALLOW_DESTRUCTIVE_SEED=1 to confirm this local database will be erased.")
+    password = os.getenv("BLOODLINE_LOCAL_DEMO_PASSWORD") or getpass.getpass("Choose a local demo password (8+ characters): ")
+    if len(password) < 8 or len(password.encode("utf-8")) > 72:
+        raise ValueError("Local demo password must be 8-72 UTF-8 bytes.")
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
@@ -43,13 +53,13 @@ def run():
     # --- Demo users: manager + inventory staff + a batch of donors ---
     manager_user = models.UserAccount(
         email="manager@bloodline.demo",
-        hashed_password=auth.hash_password(DEMO_PASSWORD),
+        hashed_password=auth.hash_password(password),
         full_name="Asha Verma",
         role_id=roles["blood_bank_manager"].id,
     )
     inv_staff_user = models.UserAccount(
         email="inventory@bloodline.demo",
-        hashed_password=auth.hash_password(DEMO_PASSWORD),
+        hashed_password=auth.hash_password(password),
         full_name="Rohan Mehta",
         role_id=roles["inventory_staff"].id,
     )
@@ -62,13 +72,13 @@ def run():
     # --- Admin + medical (screening) staff ---
     admin_user = models.UserAccount(
         email="admin@bloodline.demo",
-        hashed_password=auth.hash_password(DEMO_PASSWORD),
+        hashed_password=auth.hash_password(password),
         full_name="Ritu Kohli",
         role_id=roles["system_admin"].id,
     )
     medical_user = models.UserAccount(
         email="screening@bloodline.demo",
-        hashed_password=auth.hash_password(DEMO_PASSWORD),
+        hashed_password=auth.hash_password(password),
         full_name="Dr. Naveen Oberoi",
         role_id=roles["medical_staff"].id,
     )
@@ -83,7 +93,7 @@ def run():
 
     hospital_user = models.UserAccount(
         email="hospital@bloodline.demo",
-        hashed_password=auth.hash_password(DEMO_PASSWORD),
+        hashed_password=auth.hash_password(password),
         full_name="Dr. Simran Bedi",
         role_id=roles["hospital_coordinator"].id,
     )
@@ -104,7 +114,7 @@ def run():
     for i, name in enumerate(donor_names):
         u = models.UserAccount(
             email=f"donor{i+1}@bloodline.demo",
-            hashed_password=auth.hash_password(DEMO_PASSWORD),
+            hashed_password=auth.hash_password(password),
             full_name=name,
             role_id=roles["donor"].id,
         )
@@ -208,7 +218,7 @@ def run():
 
     print("Seed complete.")
     print(f"Blood bank id: {bank_id}")
-    print("Demo accounts (all use password:", DEMO_PASSWORD, "):")
+    print("Demo accounts use the password provided interactively or via BLOODLINE_LOCAL_DEMO_PASSWORD:")
     print("  Manager:              manager@bloodline.demo")
     print("  Inventory staff:      inventory@bloodline.demo")
     print("  Medical/screening:    screening@bloodline.demo")

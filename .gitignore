@@ -480,3 +480,7 @@ node_modules/
 *.sqlite3
 *.db-*
 *.sqlite-*
+code/frontend/dist/
+code/backend/bloodline.db
+bloodline.db
+*.db-journal

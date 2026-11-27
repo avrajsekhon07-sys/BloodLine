@@ -1,6 +1,6 @@
 # Local/staging stack: PostgreSQL + API + static frontend.
 #   cp .env.example .env   (edit secrets)   then:   docker compose up --build
-#   docker compose exec api python -m app.seed     # load demo data (synthetic)
+#   docker compose exec api python -m app.bootstrap # additive admin + synthetic planning data
 services:
   db:
     image: postgres:16
@@ -19,10 +19,10 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg2://bloodline:${POSTGRES_PASSWORD}@db:5432/bloodline
       BLOODLINE_SECRET_KEY: ${BLOODLINE_SECRET_KEY:?set BLOODLINE_SECRET_KEY in .env}
-      BLOODLINE_ENV: production
+      BLOODLINE_ENV: ${BLOODLINE_ENV:-development}
       BLOODLINE_USE_MIGRATIONS: "1"
-      BLOODLINE_DEMO_TOOLS: "0"   # scenario tools change stock; keep off outside demos
-      BLOODLINE_DEMO_LOGIN: "0"   # the demo-account picker is unauthenticated; keep it off outside local demos
+      BLOODLINE_DEMO_TOOLS: ${BLOODLINE_DEMO_TOOLS:-1}   # local only; Render production forces these off
+      BLOODLINE_DEMO_LOGIN: ${BLOODLINE_DEMO_LOGIN:-1}   # Render production sets this to 0
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@example.com}

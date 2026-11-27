@@ -117,7 +117,7 @@ This is a candidate contact list, not a medical clearance. The application recor
 
 ## Data and backend
 
-FastAPI routers depend on shared SQLAlchemy sessions from `database.py`. Models are defined in `models.py`; Pydantic schemas validate route input and output. SQLite at `./bloodline.db` is the default. Set `DATABASE_URL` to a PostgreSQL SQLAlchemy URL to use PostgreSQL. In local mode, `main.py` calls `Base.metadata.create_all`; set `BLOODLINE_USE_MIGRATIONS=1` to leave schema setup to Alembic. The provided `0001_baseline` revision creates the current model metadata; read its comments before using it as a basis for future schema changes.
+FastAPI routers depend on shared SQLAlchemy sessions from `database.py`. Models are defined in `models.py`; Pydantic schemas validate route input and output. SQLite at `./bloodline.db` is the default. Set `DATABASE_URL` to a PostgreSQL SQLAlchemy URL to use PostgreSQL. In local mode, `main.py` calls `Base.metadata.create_all`; set `BLOODLINE_USE_MIGRATIONS=1` to leave schema setup to Alembic. The provided `0001_baseline` revision creates current model metadata but does not create roles or users. Run the additive `python -m app.bootstrap` command after migrations to initialize the first administrator and synthetic planning data; it does not remove or modify existing application data.
 
 ## Run locally
 
@@ -128,7 +128,7 @@ cd code/backend
 python3 -m venv .venv
 source .venv/bin/activate       # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-python -m app.seed              # DESTRUCTIVE to the configured database: drops/recreates seeded tables
+python -m app.bootstrap        # additive setup; prompts for initial administrator email and password
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -139,9 +139,15 @@ cd code/frontend
 python3 -m http.server 5500
 ```
 
-Open <http://localhost:5500>. The frontend defaults to `http://localhost:8000`; for another API origin, set `localStorage.bl_api` in the browser console, then reload. Interactive API documentation is at <http://localhost:8000/docs> and the health endpoint is <http://localhost:8000/health>.
+Open <http://localhost:5500>. The frontend uses `code/frontend/config.js`; local development defaults to `http://localhost:8000`. Production static builds inject the API origin using `BLOODLINE_API_URL` and turn demo mode off. Interactive API documentation is at <http://localhost:8000/docs> and the health endpoint is <http://localhost:8000/health>.
 
-The seed script is for disposable local/demo data. It drops and recreates tables before inserting its fixtures; do not run it against data you need to keep. Local demo account credentials are defined by the seed script. Demo login conveniences are not appropriate for a public deployment.
+The recommended local setup above uses the safe, additive bootstrap and creates synthetic inventory and 180 days of demand history. For the richer disposable demo walkthrough with synthetic donors and workflow fixtures, first use the seed command below instead of bootstrap. The seed script drops and recreates tables; it refuses production mode, non-SQLite databases, and runs without explicit `BLOODLINE_ALLOW_DESTRUCTIVE_SEED=1`, and it prompts for a local-only demo password. Never run it against data you need to keep. The local demo picker never fills or submits a password and is disabled in production builds.
+
+Optional disposable demo fixture setup (run this instead of bootstrap):
+
+```bash
+BLOODLINE_ALLOW_DESTRUCTIVE_SEED=1 python -m app.seed
+```
 
 ## Configuration
 
@@ -152,16 +158,16 @@ The checked-in `.env.example` at the repository root is a template for Docker Co
 | `DATABASE_URL` | SQLAlchemy database connection | `sqlite:///./bloodline.db` |
 | `BLOODLINE_SECRET_KEY` | JWT signing secret | Development placeholder; set a strong random value for deployment |
 | `BLOODLINE_ENV` | Runtime mode | Production startup rejects the placeholder key |
-| `ALLOWED_ORIGINS` | Comma separated CORS origins | `*`; restrict for deployment |
+| `ALLOWED_ORIGINS` | Comma separated CORS origins | `*` only for local development; production requires exact HTTPS origins without paths |
 | `BLOODLINE_USE_MIGRATIONS` | Set `1` to have Alembic manage schema | unset: `create_all` |
 | `BLOODLINE_SARIMA` | Set `0` to disable SARIMA candidate | enabled when dependency/history support it |
-| `BLOODLINE_DEMO_TOOLS` | Enable simulated stock scenario endpoint | enabled by default outside production; forced off in production route behavior |
-| `BLOODLINE_DEMO_LOGIN` | Expose demo account picker endpoint | enabled locally; forced off in production |
+| `BLOODLINE_DEMO_TOOLS` | Enable simulated planning tools | enabled by default only in local development; all `/demo/*` endpoints return 404 in production |
+| `BLOODLINE_DEMO_LOGIN` | Expose demo account picker endpoint | enabled locally; production must set `0` and production mode forces it off |
 | `LOGIN_RATE_LIMIT`, `LOGIN_MAX_ATTEMPTS`, `LOGIN_MAX_ATTEMPTS_PER_IP`, `LOGIN_WINDOW_SECONDS` | Login throttling controls | Rate limited; defaults and overrides in `code/backend/app/services/ratelimit.py` |
 | `BLOODLINE_SHELF_<COMPONENT>` | Configure component shelf life planning values | Defaults in inventory/unit service; values are not medical guidance |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Optional Web Push configuration | Push disabled until configured |
 
-For local use, the database and key defaults are sufficient. For PostgreSQL Docker Compose, set `POSTGRES_PASSWORD` and `BLOODLINE_SECRET_KEY`, configure `ALLOWED_ORIGINS`, and optionally set VAPID keys. The exact login throttle defaults are 5 attempts per account/IP, 20 per IP and a 900 second window; see `code/backend/app/services/ratelimit.py` and `.env.example` for supported overrides.
+For local use, the database and key defaults are sufficient. For PostgreSQL Docker Compose, set `POSTGRES_PASSWORD` and `BLOODLINE_SECRET_KEY`, configure `ALLOWED_ORIGINS`, and optionally set VAPID keys. Production must use PostgreSQL, a unique `BLOODLINE_SECRET_KEY`, `BLOODLINE_ENV=production`, `BLOODLINE_USE_MIGRATIONS=1`, `BLOODLINE_DEMO_LOGIN=0`, and `BLOODLINE_DEMO_TOOLS=0`. Never place initial administrator credentials in `.env.example` or Git. The exact login throttle defaults are 5 attempts per account/IP, 20 per IP and a 900 second window; see `code/backend/app/services/ratelimit.py` and `.env.example` for supported overrides.
 
 ## Docker
 
@@ -169,10 +175,10 @@ For local use, the database and key defaults are sufficient. For PostgreSQL Dock
 cp .env.example code/.env
 # Edit code/.env and replace the placeholder password and signing key.
 docker compose -f code/docker-compose.yml up --build
-docker compose -f code/docker-compose.yml exec api python -m app.seed  # destructive to configured demo DB
+docker compose -f code/docker-compose.yml exec api python -m app.bootstrap  # prompt for initial admin credentials; additive
 ```
 
-Compose starts PostgreSQL, the API on port 8000 and the static frontend on port 8080. API image startup applies Alembic migrations. The demo seed command drops and recreates schema/data; do not use it on data you need to preserve.
+Compose starts PostgreSQL, the API on port 8000 and the static frontend on port 8080. API image startup applies Alembic migrations and listens on `0.0.0.0:$PORT` (default 8000). Compose defaults to local development mode with exact localhost CORS and demo helpers; the additive bootstrap prompts for a first administrator and synthetic inventory/demand. The destructive seed is restricted to explicitly opted-in local SQLite only. For persistent public hosting, follow the [Render deployment runbook](docs/deployment-render.md).
 
 ## API and tests
 
@@ -206,7 +212,7 @@ Tests are in `code/backend/tests/`; API tests use a temporary database fixture. 
 - Demand inputs are synthetic, not historical hospital consumption; forecasts and evaluation metrics cannot establish real world accuracy.
 - Matching compatibility is simplified for whole blood and ignores component specific rules; medical screening remains a human workflow.
 - Login rate limiting is in memory, so it resets on process restart and is not shared across workers.
-- The frontend is a static single page application without a package manager/build pipeline; its API origin is configured in browser local storage.
+- The frontend is a static single page application without a JavaScript package manager; its API origin comes from `config.js`, with a small Python build script for production static hosting.
 - Redistributable stock recommendations require staff approval and execution outside the application.
 - Web Push, a public staging deployment and production PostgreSQL operation require environment credentials and infrastructure; these are not demonstrated by local source alone.
 - The baseline Alembic revision creates current metadata as a convenience; future model changes should use explicit migration revisions.

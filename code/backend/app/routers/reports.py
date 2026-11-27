@@ -22,7 +22,7 @@ def reports_summary(
     if blood_bank_id is None:
         bank = db.query(models.BloodBank).first()
         if bank is None:
-            raise HTTPException(400, "No blood bank found — run the seed script first.")
+            raise HTTPException(400, "No blood bank found — run `python -m app.bootstrap` first.")
         blood_bank_id = bank.id
 
     inventory_rows = db.query(models.Inventory).filter(models.Inventory.blood_bank_id == blood_bank_id).all()

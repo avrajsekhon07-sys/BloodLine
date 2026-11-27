@@ -51,7 +51,7 @@ def approve_request(
     if blood_bank_id is None:
         bank = db.query(models.BloodBank).first()
         if bank is None:
-            raise HTTPException(400, "No blood bank found — run the seed script first.")
+            raise HTTPException(400, "No blood bank found — run `python -m app.bootstrap` first.")
         blood_bank_id = bank.id
 
     inv = (

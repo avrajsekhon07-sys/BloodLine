@@ -1,16 +1,23 @@
 import os
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .database import Base, engine
+from .database import Base, DATABASE_URL, engine
 from .routers import (
     auth, inventory, demand, forecast, risk, donors, hospital, requests, screening, admin, donor, reports,
     donations, admin_users, notifications, units, regional, push, evaluation, demo,
 )
 
-if os.getenv("BLOODLINE_ENV") == "production" and os.getenv("BLOODLINE_SECRET_KEY", "dev-only-secret-change-me") == "dev-only-secret-change-me":
-    raise RuntimeError("Set BLOODLINE_SECRET_KEY before running in production.")
+if os.getenv("BLOODLINE_ENV") == "production":
+    secret_key = os.getenv("BLOODLINE_SECRET_KEY", "dev-only-secret-change-me")
+    if secret_key in {"dev-only-secret-change-me", "replace-with-output-of-python-secrets-token-url-safe-48"} or len(secret_key) < 32:
+        raise RuntimeError("Set a unique BLOODLINE_SECRET_KEY of at least 32 characters before running in production.")
+    if os.getenv("BLOODLINE_USE_MIGRATIONS") != "1":
+        raise RuntimeError("Set BLOODLINE_USE_MIGRATIONS=1 in production; apply schema changes with Alembic.")
+    if DATABASE_URL.startswith("sqlite"):
+        raise RuntimeError("Production must use persistent PostgreSQL, not container-local SQLite.")
 
 # With BLOODLINE_USE_MIGRATIONS=1 the schema is managed by Alembic (`alembic upgrade head`).
 if os.getenv("BLOODLINE_USE_MIGRATIONS") != "1":
@@ -26,9 +33,27 @@ app = FastAPI(
     version="1.0.0",
 )
 
+def configured_origins():
+    raw = os.getenv("ALLOWED_ORIGINS")
+    production = os.getenv("BLOODLINE_ENV") == "production"
+    if production and not raw:
+        raise RuntimeError("Set ALLOWED_ORIGINS to the exact HTTPS frontend origin(s) in production.")
+    origins = [o.strip() for o in (raw or "*").split(",") if o.strip()]
+    if production:
+        if not origins:
+            raise RuntimeError("Set at least one exact production frontend origin in ALLOWED_ORIGINS.")
+        if "*" in origins:
+            raise RuntimeError("Wildcard CORS origins are not allowed in production.")
+        for origin in origins:
+            parsed = urlsplit(origin)
+            if parsed.scheme != "https" or not parsed.netloc or parsed.path or parsed.query or parsed.fragment:
+                raise RuntimeError("Production ALLOWED_ORIGINS entries must be exact HTTPS origins without paths.")
+    return origins
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[o.strip() for o in os.getenv("ALLOWED_ORIGINS", "*").split(",")],  # restrict in staging/production
+    allow_origins=configured_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -17,14 +17,14 @@ saved per browser, following the system setting on first visit. Respects `prefer
 cd backend
 python3 -m venv venv && source venv/bin/activate     # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-python -m app.seed                                    # demo data (drops and recreates tables!)
+BLOODLINE_ALLOW_DESTRUCTIVE_SEED=1 python -m app.seed # disposable SQLite only; prompts for local password
 uvicorn app.main:app --reload --port 8000             # docs: http://localhost:8000/docs
 
 cd ../frontend && python3 -m http.server 5500         # open http://localhost:5500
 ```
 The frontend calls `http://localhost:8000`; to change it run
 `localStorage.bl_api = "https://your-api"` in the browser console.
-The login page lists every demo account (staff chips plus a picker for all 15 donors with blood group and status). Demo logins (password `bloodline123`): manager@, inventory@, hospital@, screening@, admin@,
+The login page lists every demo account (staff chips plus a picker for all 15 donors with blood group and status). Historical demo account emails (former shared password retired; local seed now prompts for a password): manager@, inventory@, hospital@, screening@, admin@,
 donor1@ … donor15@ `bloodline.demo`.
 
 ## Environment variables
@@ -99,7 +99,7 @@ alembic revision --autogenerate -m "describe change"   # future schema changes
 * Matching showed "999 days since last donation" for first-time donors; it now says "No donation on record".
 * Forecast responses now include MAE/RMSE; matching returns `distance_km`.
 * Synthetic demand data changed on every seed run because Python randomises `hash()` per process; it now uses a stable checksum, so seeded data is reproducible.
-* The previous UI is kept as `frontend/legacy-index.html`.
+* `frontend/legacy-index.html` is an unused, retained legacy UI. It is not linked from the active frontend, not served by the FastAPI application, and is excluded from the Render static build; it is preserved for reference and is not maintained.
 
 ---
 ## Earlier prototype notes (W6/W7)
@@ -156,7 +156,7 @@ Open http://localhost:5500
 
 ## 5. Demo credentials
 
-All accounts use the password `bloodline123`.
+The former shared demo password has been retired. The current local seed prompts for a password and only runs against explicitly opted-in SQLite development databases.
 
 | Role | Email |
 |---|---|

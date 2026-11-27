@@ -26,6 +26,11 @@ def tools_enabled() -> bool:
     return os.getenv("BLOODLINE_DEMO_TOOLS", "1") == "1" and os.getenv("BLOODLINE_ENV") != "production"
 
 
+def require_demo_tools():
+    if not tools_enabled():
+        raise HTTPException(404, "Not found")
+
+
 def _bank(db, bank_id):
     bank = db.query(models.BloodBank).filter(models.BloodBank.id == bank_id).first() if bank_id else db.query(models.BloodBank).first()
     if bank is None:
@@ -35,7 +40,8 @@ def _bank(db, bank_id):
 
 @router.get("/status")
 def status(user: models.UserAccount = Depends(auth.require_roles(*MANAGERS))):
-    return {"scenario_tools": tools_enabled()}
+    require_demo_tools()
+    return {"scenario_tools": True}
 
 
 @router.get("/whatif")
@@ -45,6 +51,7 @@ def what_if(
     db: Session = Depends(get_db),
     user: models.UserAccount = Depends(auth.require_roles(*MANAGERS)),
 ):
+    require_demo_tools()
     bank = _bank(db, blood_bank_id)
     stock = defaultdict(int)
     for inv in db.query(models.Inventory).filter(models.Inventory.blood_bank_id == bank.id).all():
@@ -83,8 +90,7 @@ def scenario(
     db: Session = Depends(get_db),
     user: models.UserAccount = Depends(auth.require_roles(*MANAGERS)),
 ):
-    if not tools_enabled():
-        raise HTTPException(404, "Not found")
+    require_demo_tools()
     if payload.action not in ("shortage", "restock"):
         raise HTTPException(400, "action must be 'shortage' or 'restock'")
     try:

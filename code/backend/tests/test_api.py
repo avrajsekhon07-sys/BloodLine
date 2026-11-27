@@ -1,11 +1,13 @@
 """End-to-end API tests against a freshly seeded throwaway database."""
+import os
+
 import pytest
 from fastapi.testclient import TestClient
 
 from app import seed
 from app.main import app
 
-PW = "bloodline123"
+PW = os.environ["BLOODLINE_TEST_PASSWORD"]
 
 
 @pytest.fixture(scope="module")
@@ -210,3 +212,91 @@ def test_login_rate_limit_returns_429_then_recovers_for_good_credentials(client)
     assert r.status_code == 429 and int(r.headers["retry-after"]) > 0
     assert client.post("/auth/login", json={"email": "manager@bloodline.demo", "password": PW}).status_code == 200  # other accounts unaffected
     ratelimit.limiter.clear()
+
+
+def test_production_disables_all_demo_endpoints(client, monkeypatch):
+    manager = login(client, "manager@bloodline.demo")
+    monkeypatch.setenv("BLOODLINE_ENV", "production")
+    monkeypatch.setenv("BLOODLINE_DEMO_TOOLS", "1")
+    assert client.get("/demo/status", headers=manager).status_code == 404
+    assert client.get("/demo/whatif", headers=manager).status_code == 404
+    assert client.post("/demo/scenario", headers=manager, json={"blood_group": "A+", "action": "shortage"}).status_code == 404
+    monkeypatch.setenv("BLOODLINE_DEMO_LOGIN", "1")
+    assert client.get("/auth/demo-accounts").status_code == 404
+
+
+def test_production_cors_requires_exact_https_origins(monkeypatch):
+    from app.main import configured_origins
+
+    monkeypatch.setenv("BLOODLINE_ENV", "production")
+    monkeypatch.delenv("ALLOWED_ORIGINS", raising=False)
+    with pytest.raises(RuntimeError, match="ALLOWED_ORIGINS"):
+        configured_origins()
+    monkeypatch.setenv("ALLOWED_ORIGINS", "*")
+    with pytest.raises(RuntimeError, match="Wildcard"):
+        configured_origins()
+    monkeypatch.setenv("ALLOWED_ORIGINS", "https://bloodline.example")
+    assert configured_origins() == ["https://bloodline.example"]
+    monkeypatch.setenv("ALLOWED_ORIGINS", "https://bloodline.example/path")
+    with pytest.raises(RuntimeError, match="exact HTTPS"):
+        configured_origins()
+    monkeypatch.setenv("ALLOWED_ORIGINS", "https://bloodline.example/")
+    with pytest.raises(RuntimeError, match="exact HTTPS"):
+        configured_origins()
+
+
+def test_safe_bootstrap_is_idempotent_and_additive(client):
+    from app import bootstrap, models
+    from app.database import SessionLocal
+
+    db = SessionLocal()
+    bank_count = db.query(models.BloodBank).count()
+    donor_count = db.query(models.Donor).count()
+    existing_stock = db.query(models.Inventory).filter_by(quantity_units=20).first()
+    existing_stock_id = existing_stock.id
+    db.close()
+
+    first = bootstrap.bootstrap_database("initial-admin@example.com", "a-strong-bootstrap-password")
+    second = bootstrap.bootstrap_database("initial-admin@example.com", "a-different-strong-password")
+    assert first["admin"] is True and second["admin"] is False
+    assert second["banks"] == second["inventory"] == second["demand"] == second["roles"] == 0
+
+    db = SessionLocal()
+    assert db.query(models.BloodBank).count() == bank_count + len(bootstrap.SYNTHETIC_BANKS)
+    assert db.query(models.Inventory).filter_by(id=existing_stock_id).first().quantity_units == 20
+    admin = db.query(models.UserAccount).filter_by(email="initial-admin@example.com").one()
+    assert admin.role.name == models.RoleName.SYSTEM_ADMIN
+    synthetic_banks = db.query(models.BloodBank).filter(models.BloodBank.name.like("BloodLine Synthetic Region %")).all()
+    assert all(db.query(models.DemandHistory).filter_by(blood_bank_id=b.id, is_synthetic=True).count() >= 8 * 180 for b in synthetic_banks)
+    assert db.query(models.Donor).count() == donor_count  # bootstrap did not add synthetic donor identities
+    synthetic_bank_id = synthetic_banks[0].id
+    db.close()
+
+    admin_login = client.post("/auth/login", json={"email": "initial-admin@example.com", "password": "a-strong-bootstrap-password"})
+    assert admin_login.status_code == 200
+    admin_headers = {"Authorization": "Bearer " + admin_login.json()["access_token"]}
+    assert client.get("/admin/users", headers=admin_headers).status_code == 200
+    assert client.get("/inventory?blood_bank_id=" + synthetic_bank_id, headers=admin_headers).status_code == 200
+    assert client.get("/risk/" + synthetic_bank_id, headers=admin_headers).status_code == 200
+    assert client.get("/forecast/" + synthetic_bank_id + "/A+", headers=admin_headers).status_code == 200
+    assert client.get("/regional/overview", headers=admin_headers).status_code == 200
+
+
+def test_destructive_seed_refuses_production_and_non_sqlite(client, monkeypatch):
+    from app import models, seed
+    from app.database import SessionLocal
+
+    db = SessionLocal()
+    before = db.query(models.BloodBank).count()
+    db.close()
+    monkeypatch.setenv("BLOODLINE_ALLOW_DESTRUCTIVE_SEED", "1")
+    monkeypatch.setenv("BLOODLINE_ENV", "production")
+    with pytest.raises(RuntimeError, match="disabled in production"):
+        seed.run()
+    monkeypatch.setenv("BLOODLINE_ENV", "development")
+    monkeypatch.setattr(seed, "DATABASE_URL", "postgresql://remote.example/database")
+    with pytest.raises(RuntimeError, match="local SQLite"):
+        seed.run()
+    db = SessionLocal()
+    assert db.query(models.BloodBank).count() == before
+    db.close()

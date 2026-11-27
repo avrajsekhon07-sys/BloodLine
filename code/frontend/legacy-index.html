@@ -141,7 +141,7 @@ function loginView() {
     ["Donor", "donor1@bloodline.demo"],
   ];
   const demoBox = box.querySelector("#demoBox");
-  demoBox.innerHTML = `<div class="font-semibold text-gray-600 mb-1">All use password: bloodline123</div>` +
+  demoBox.innerHTML = `<div class="font-semibold text-gray-600 mb-1">Select a local demo email and enter the configured password.</div>` +
     demoAccounts.map(([label, email]) => `
       <div class="flex justify-between items-center py-1">
         <span>${label}</span>
@@ -153,7 +153,7 @@ function loginView() {
   demoBox.querySelectorAll(".useDemoBtn").forEach(b => {
     b.onclick = () => {
       box.querySelector("#email").value = b.dataset.email;
-      box.querySelector("#password").value = "bloodline123";
+      box.querySelector("#password").focus();
     };
   });
 
@@ -392,7 +392,7 @@ async function pageDemand(content) {
     const bg = select.value;
     const points = await api(`/demand/history?blood_group=${encodeURIComponent(bg)}`);
     if (points.length === 0) {
-      statsEl.innerHTML = `<div class="col-span-5 text-xs text-gray-500">No history — run the seed script.</div>`;
+      statsEl.innerHTML = `<div class="col-span-5 text-xs text-gray-500">No history — run <code>python -m app.bootstrap</code>.</div>`;
       chartEl.innerHTML = ""; tableWrap.innerHTML = "";
       return;
     }
