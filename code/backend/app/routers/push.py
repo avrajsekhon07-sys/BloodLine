@@ -52,3 +52,16 @@ def unsubscribe(payload: SubscribeIn, db: Session = Depends(get_db),
     ).delete()
     db.commit()
     return {"subscribed": False}
+
+
+@router.post("/test")
+def send_test(db: Session = Depends(get_db), user: models.UserAccount = Depends(auth.require_roles("donor"))):
+    """Send a test push to the signed-in donor's own subscribed browsers."""
+    if user.is_demo:
+        raise HTTPException(403, "Push is disabled for synthetic demo accounts.")
+    if not push_svc.configured():
+        raise HTTPException(503, "Push notifications are not configured on this server.")
+    if db.query(models.PushSubscription).filter(models.PushSubscription.user_id == user.id).count() == 0:
+        raise HTTPException(400, "Enable push alerts on this device first.")
+    sent, failed = push_svc.send_to_user(db, user.id, "BloodLine", "Test notification: push alerts are working on this device.")
+    return {"sent": sent, "failed": failed}

@@ -392,3 +392,12 @@ def test_destructive_seed_refuses_production_and_non_sqlite(client, monkeypatch)
     db = SessionLocal()
     assert db.query(models.BloodBank).count() == before
     db.close()
+
+
+def test_push_test_endpoint_guards(client, monkeypatch):
+    monkeypatch.delenv("VAPID_PUBLIC_KEY", raising=False)
+    monkeypatch.delenv("VAPID_PRIVATE_KEY", raising=False)
+    assert client.post("/push/test").status_code == 401
+    assert client.post("/push/test", headers=login(client, "manager@bloodline.demo")).status_code == 403
+    # 503 without VAPID keys; 403 if an earlier test provisioned donor1 as a synthetic demo account
+    assert client.post("/push/test", headers=login(client, "donor1@bloodline.demo")).status_code in (403, 503)
