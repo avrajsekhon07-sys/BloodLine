@@ -400,3 +400,19 @@ def test_push_test_endpoint_guards(client, monkeypatch):
     assert client.post("/push/test").status_code == 401
     assert client.post("/push/test", headers=login(client, "manager@bloodline.demo")).status_code == 403
     assert client.post("/push/test", headers=login(client, "donor1@bloodline.demo")).status_code == 503  # no VAPID keys
+
+
+def test_outreach_dedup_only_for_real_staff(client):
+    from app import models
+    from app.database import SessionLocal
+    m = login(client, "manager@bloodline.demo")
+    group = next(g for g in ("A+", "B+", "O+", "AB+", "A-", "B-", "O-", "AB-") if client.get(f"/donors/match/{g.replace('+', '%2B')}", headers=m).json())
+    first = client.post("/notifications/outreach", headers=m, json={"blood_group": group}).json()
+    again = client.post("/notifications/outreach", headers=m, json={"blood_group": group}).json()
+    db = SessionLocal()
+    is_demo = db.query(models.UserAccount).filter(models.UserAccount.email == "manager@bloodline.demo").one().is_demo
+    db.close()
+    if is_demo:
+        assert again["notified"] == again["matched"] and again["skipped_recently_notified"] == 0
+    else:
+        assert again["notified"] == 0 and again["skipped_recently_notified"] == first["matched"]

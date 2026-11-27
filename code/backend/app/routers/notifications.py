@@ -54,7 +54,8 @@ def send_outreach(
     notified = skipped = pushed = push_failed = no_sub = 0
     user_of = {d.id: d.user_id for d in donors}
     for m in matches:
-        dup = (
+        # Real staff: one identical message per donor per 24 h. Demo accounts: no limit, so the demo can be re-run anytime.
+        dup = None if user.is_demo else (
             db.query(models.DonorNotification)
             .filter(models.DonorNotification.donor_id == m["donor_id"], models.DonorNotification.message == message, models.DonorNotification.sent_at >= since)
             .first()
