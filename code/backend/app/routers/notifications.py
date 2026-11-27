@@ -107,3 +107,18 @@ def mark_read(
     n.was_read = True
     db.commit()
     return schemas.NotificationOut(id=n.id, message=n.message, sent_at=n.sent_at, was_read=True)
+
+
+@router.delete("/{notification_id}")
+def delete_notification(
+    notification_id: str,
+    db: Session = Depends(get_db),
+    user: models.UserAccount = Depends(auth.require_roles("donor")),
+):
+    """A donor removes one of their own notifications."""
+    n = db.query(models.DonorNotification).filter(models.DonorNotification.id == notification_id).first()
+    if n is None or user.donor_profile is None or n.donor_id != user.donor_profile.id:
+        raise HTTPException(404, "Notification not found")
+    db.delete(n)
+    db.commit()
+    return {"deleted": True}

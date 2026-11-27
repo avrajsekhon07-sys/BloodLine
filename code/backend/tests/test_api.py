@@ -416,3 +416,22 @@ def test_outreach_dedup_only_for_real_staff(client):
         assert again["notified"] == again["matched"] and again["skipped_recently_notified"] == 0
     else:
         assert again["notified"] == 0 and again["skipped_recently_notified"] == first["matched"]
+
+
+def test_donor_can_delete_only_own_notification(client):
+    m = login(client, "manager@bloodline.demo")
+    group = next(g for g in ("A+", "B+", "O+", "AB+", "A-", "B-", "O-", "AB-") if client.get(f"/donors/match/{g.replace('+', '%2B')}", headers=m).json())
+    client.post("/notifications/outreach", headers=m, json={"blood_group": group, "message": "delete-me test alert"})
+    owner = other = None
+    for i in range(1, 16):
+        h = login(client, f"donor{i}@bloodline.demo")
+        mine = [n for n in client.get("/notifications/me", headers=h).json() if n["message"] == "delete-me test alert"]
+        if mine and owner is None:
+            owner, nid = h, mine[0]["id"]
+        elif not mine and other is None:
+            other = h
+    assert owner and other
+    assert client.delete(f"/notifications/{nid}", headers=other).status_code == 404  # not theirs
+    assert client.delete(f"/notifications/{nid}", headers=m).status_code == 403  # staff cannot
+    assert client.delete(f"/notifications/{nid}", headers=owner).status_code == 200
+    assert all(n["id"] != nid for n in client.get("/notifications/me", headers=owner).json())
