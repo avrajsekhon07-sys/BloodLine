@@ -399,5 +399,4 @@ def test_push_test_endpoint_guards(client, monkeypatch):
     monkeypatch.delenv("VAPID_PRIVATE_KEY", raising=False)
     assert client.post("/push/test").status_code == 401
     assert client.post("/push/test", headers=login(client, "manager@bloodline.demo")).status_code == 403
-    # 503 without VAPID keys; 403 if an earlier test provisioned donor1 as a synthetic demo account
-    assert client.post("/push/test", headers=login(client, "donor1@bloodline.demo")).status_code in (403, 503)
+    assert client.post("/push/test", headers=login(client, "donor1@bloodline.demo")).status_code == 503  # no VAPID keys

@@ -66,8 +66,8 @@ def send_outreach(
         notified += 1
         if push_svc.configured() and db.query(models.PushSubscription).filter(models.PushSubscription.user_id == user_of[m["donor_id"]]).count() == 0:
             no_sub += 1  # this donor never enabled push on any browser (or the table was reset by a re-seed)
-        # The faculty experience is synthetic: never deliver real push messages.
-        ok, bad = (0, 0) if user.is_demo else push_svc.send_to_user(db, user_of[m["donor_id"]], "BloodLine", message)
+        # Demo outreach also pushes, so the public demo can show real notifications (messages are synthetic).
+        ok, bad = push_svc.send_to_user(db, user_of[m["donor_id"]], "BloodLine", message)
         pushed += ok
         push_failed += bad
     audit.log(db, user.id, "outreach_sent", f"{group.value}: {notified} notified of {len(matches)} matched, {pushed} pushed")

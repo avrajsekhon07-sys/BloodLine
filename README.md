@@ -230,7 +230,7 @@ Tests are in `code/backend/tests/`; API tests use a temporary database fixture. 
 - Login rate limiting is in memory, so it resets on process restart and is not shared across workers.
 - The frontend is a static single page application without a JavaScript package manager; its API origin comes from `config.js`, with a small Python build script for production static hosting.
 - Redistributable stock recommendations require staff approval and execution outside the application.
-- Web Push requires VAPID credentials and is not enabled in the public deployment. The public deployment runs on free-tier hosting and is a demonstration, not a production service.
+- Web Push requires VAPID credentials (set on the public deployment). Demo accounts can enable push too; because demo logins are shared, anyone using a demo donor account may receive that donor's synthetic alerts. The public deployment runs on free-tier hosting and is a demonstration, not a production service.
 - The baseline Alembic revision creates current metadata as a convenience; future model changes should use explicit migration revisions.
 
 Reasonable next steps include testing with governed, de-identified operational data; component aware matching rules reviewed by domain experts; shared rate limiting for multi worker deployment; deployment hardening and monitoring; and richer forecast evaluation across data splits and seasonal periods.

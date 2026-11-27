@@ -27,8 +27,6 @@ def public_key():
 @router.post("/subscribe", status_code=201)
 def subscribe(payload: SubscribeIn, db: Session = Depends(get_db),
               user: models.UserAccount = Depends(auth.require_roles("donor"))):
-    if user.is_demo:
-        raise HTTPException(403, "Push subscriptions are disabled for synthetic demo accounts.")
     p256dh, auth_key = payload.keys.get("p256dh"), payload.keys.get("auth")
     if not p256dh or not auth_key:
         raise HTTPException(400, "keys.p256dh and keys.auth are required")
@@ -45,8 +43,6 @@ def subscribe(payload: SubscribeIn, db: Session = Depends(get_db),
 @router.post("/unsubscribe")
 def unsubscribe(payload: SubscribeIn, db: Session = Depends(get_db),
                 user: models.UserAccount = Depends(auth.require_roles("donor"))):
-    if user.is_demo:
-        raise HTTPException(403, "Push subscriptions are disabled for synthetic demo accounts.")
     db.query(models.PushSubscription).filter(
         models.PushSubscription.endpoint == payload.endpoint, models.PushSubscription.user_id == user.id
     ).delete()
@@ -57,8 +53,6 @@ def unsubscribe(payload: SubscribeIn, db: Session = Depends(get_db),
 @router.post("/test")
 def send_test(db: Session = Depends(get_db), user: models.UserAccount = Depends(auth.require_roles("donor"))):
     """Send a test push to the signed-in donor's own subscribed browsers."""
-    if user.is_demo:
-        raise HTTPException(403, "Push is disabled for synthetic demo accounts.")
     if not push_svc.configured():
         raise HTTPException(503, "Push notifications are not configured on this server.")
     if db.query(models.PushSubscription).filter(models.PushSubscription.user_id == user.id).count() == 0:
