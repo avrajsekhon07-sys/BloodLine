@@ -14,7 +14,7 @@ def configured() -> bool:
     return bool(os.getenv("VAPID_PUBLIC_KEY") and os.getenv("VAPID_PRIVATE_KEY"))
 
 
-def send_to_user(db, user_id: str, title: str, body: str):
+def send_to_user(db, user_id: str, title: str, body: str, errors: list | None = None):
     """Returns (sent, failed). Failures are logged so a missing pop-up can be diagnosed from the server log."""
     if not configured():
         return 0, 0
@@ -37,10 +37,14 @@ def send_to_user(db, user_id: str, title: str, body: str):
         except WebPushException as e:
             code = getattr(getattr(e, "response", None), "status_code", None)
             log.warning("Web Push delivery failed (HTTP %s): %s", code, str(e)[:200])
+            if errors is not None:
+                errors.append(f"push service returned HTTP {code}: {str(getattr(e, 'message', e))[:160]}")
             failed += 1
             if code in (404, 410):
                 db.delete(sub)  # subscription expired or was revoked in the browser
         except Exception as e:
             log.warning("Web Push error: %s", str(e)[:200])
+            if errors is not None:
+                errors.append(f"{type(e).__name__}: {str(e)[:160]}")
             failed += 1
     return sent, failed

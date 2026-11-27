@@ -63,5 +63,7 @@ def send_test(db: Session = Depends(get_db), user: models.UserAccount = Depends(
         raise HTTPException(503, "Push notifications are not configured on this server.")
     if db.query(models.PushSubscription).filter(models.PushSubscription.user_id == user.id).count() == 0:
         raise HTTPException(400, "Enable push alerts on this device first.")
-    sent, failed = push_svc.send_to_user(db, user.id, "BloodLine", "Test notification: push alerts are working on this device.")
-    return {"sent": sent, "failed": failed}
+    errors: list = []
+    sent, failed = push_svc.send_to_user(db, user.id, "BloodLine", "Test notification: push alerts are working on this device.", errors)
+    db.commit()  # persist removal of expired subscriptions
+    return {"sent": sent, "failed": failed, "error": errors[0] if errors else None}
