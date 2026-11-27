@@ -149,6 +149,30 @@ def bootstrap_demo_database(today=None):
                 counts["donors"] += 1
         db.flush()
 
+        # Keep the demo usable: every blood group that has demo donors gets at least one donor who can be
+        # matched (available, consenting, past the 90-day cooldown). Only donors with no donation recorded
+        # in the app are adjusted, so a donation entered during a demo is never undone.
+        demo_donors = (
+            db.query(models.Donor).join(models.UserAccount, models.Donor.user_id == models.UserAccount.id)
+            .filter(models.UserAccount.email.like("donor%@bloodline.demo")).order_by(models.UserAccount.email).all()
+        )
+        cutoff = today - dt.timedelta(days=90)
+        by_group = {}
+        for d in demo_donors:
+            by_group.setdefault(d.blood_group, []).append(d)
+        refreshed = 0
+        for group_donors in by_group.values():
+            if any(d.is_available and d.notification_consent and (d.last_donation_date is None or d.last_donation_date <= cutoff)
+                   for d in group_donors):
+                continue
+            d = next((d for d in group_donors if db.query(models.Donation).filter_by(donor_id=d.id).count() == 0), None)
+            if d is not None:
+                d.last_donation_date, d.is_available, d.notification_consent = today - dt.timedelta(days=120), True, True
+                refreshed += 1
+        if refreshed:
+            print(f"Made {refreshed} demo donor(s) available so every demo blood group has a matchable donor.")
+        db.flush()
+
         start = today - dt.timedelta(days=179)
         all_series = generate_all_groups(str(start), days=180)
         bank_ids = [bank.id for bank, _, _ in bank_rows]
