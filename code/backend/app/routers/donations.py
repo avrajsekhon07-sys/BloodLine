@@ -16,6 +16,7 @@ from .. import models, schemas, auth, audit
 from ..services import units as units_svc
 from ..database import get_db
 from ..services.donor_matching import DONATION_COOLDOWN_DAYS, days_since
+from ..services import demo_scope
 
 router = APIRouter(prefix="/donations", tags=["donations"])
 
@@ -51,7 +52,7 @@ def ready_donors(
 ):
     """Donors whom medical staff have screened as eligible and who can donate now."""
     out = []
-    for d in db.query(models.Donor).all():
+    for d in demo_scope.donors(db, user).all():
         rec = _ready(db, d)
         if rec:
             out.append(schemas.ReadyDonorOut(
@@ -72,9 +73,7 @@ def record_donation(
     if donation_date > date.today():
         raise HTTPException(400, "donation_date cannot be in the future")
 
-    donor = db.query(models.Donor).filter(models.Donor.id == payload.donor_id).first()
-    if donor is None:
-        raise HTTPException(404, "Donor not found")
+    donor = demo_scope.donor(db, user, payload.donor_id)
     if _ready(db, donor) is None:
         raise HTTPException(
             400,
@@ -85,10 +84,10 @@ def record_donation(
     bank_id = payload.blood_bank_id
     if bank_id is None:
         staff = user.staff_profile
-        bank = db.query(models.BloodBank).filter(models.BloodBank.id == staff.blood_bank_id).first() if staff else db.query(models.BloodBank).first()
-        if bank is None:
-            raise HTTPException(400, "No blood bank found — run `python -m app.bootstrap` first.")
+        bank = demo_scope.bank(db, user, staff.blood_bank_id if staff else None)
         bank_id = bank.id
+    else:
+        demo_scope.bank(db, user, bank_id)
 
     donation = models.Donation(
         donor_id=donor.id, blood_bank_id=bank_id, donation_date=donation_date, units_collected=payload.units_collected,
@@ -97,7 +96,7 @@ def record_donation(
     donor.last_donation_date = donation_date
 
     inv = (
-        db.query(models.Inventory)
+        demo_scope.inventory(db, user)
         .filter(
             models.Inventory.blood_bank_id == bank_id,
             models.Inventory.blood_group == donor.blood_group,

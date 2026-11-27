@@ -8,6 +8,7 @@ from .. import models, schemas, auth
 from ..database import get_db
 from ..services.forecasting import forecast_demand
 from ..services.risk import assess_risk
+from ..services import demo_scope
 
 router = APIRouter(prefix="/risk", tags=["risk"])
 
@@ -19,12 +20,13 @@ def get_risk_overview(
     user: models.UserAccount = Depends(auth.require_roles("blood_bank_manager", "system_admin")),
 ):
     """Runs the forecast + risk rule for every blood group stocked at this bank."""
-    inventory_rows = db.query(models.Inventory).filter(models.Inventory.blood_bank_id == blood_bank_id).all()
+    demo_scope.bank(db, user, blood_bank_id)
+    inventory_rows = demo_scope.inventory(db, user).filter(models.Inventory.blood_bank_id == blood_bank_id).all()
     results = []
 
     for inv in inventory_rows:
         demand_rows = (
-            db.query(models.DemandHistory)
+            demo_scope.demand(db, user)
             .filter(
                 models.DemandHistory.blood_bank_id == blood_bank_id,
                 models.DemandHistory.blood_group == inv.blood_group,
@@ -40,7 +42,7 @@ def get_risk_overview(
         risk = assess_risk(inv.quantity_units, forecast["predicted_units"])
 
         recent = (
-            db.query(models.Alert)
+            demo_scope.alerts(db, user)
             .filter(
                 models.Alert.blood_bank_id == blood_bank_id,
                 models.Alert.blood_group == inv.blood_group,
@@ -81,7 +83,8 @@ def get_risk_history(
     user: models.UserAccount = Depends(auth.require_roles("blood_bank_manager", "system_admin")),
 ):
     """Stored MODERATE/HIGH alerts over time (FR-RISK-3) for historical risk trends."""
-    q = db.query(models.Alert).filter(
+    demo_scope.bank(db, user, blood_bank_id)
+    q = demo_scope.alerts(db, user).filter(
         models.Alert.blood_bank_id == blood_bank_id,
         models.Alert.created_at >= datetime.utcnow() - timedelta(days=days),
     )

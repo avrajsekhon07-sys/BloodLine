@@ -15,6 +15,7 @@ from ..database import get_db
 from ..services.donor_matching import match_donors
 from ..services.geo import haversine_km
 from ..services import push as push_svc
+from ..services import demo_scope
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
@@ -29,8 +30,8 @@ def send_outreach(
         group = models.BloodGroup(payload.blood_group)
     except ValueError:
         raise HTTPException(400, "Unknown blood_group")
-    bank = db.query(models.BloodBank).first()
-    donors = db.query(models.Donor).all()
+    bank = demo_scope.bank(db, user, user.staff_profile.blood_bank_id if user.staff_profile else None)
+    donors = demo_scope.donors(db, user).all()
     dicts = [
         {
             "donor_id": d.id, "full_name": d.user.full_name, "blood_group": d.blood_group.value,
@@ -47,7 +48,7 @@ def send_outreach(
         "please get in touch. Medical staff will confirm your eligibility at screening."
     )
     alert = (
-        db.query(models.Alert).filter(models.Alert.blood_group == group).order_by(models.Alert.created_at.desc()).first()
+        demo_scope.alerts(db, user).filter(models.Alert.blood_group == group).order_by(models.Alert.created_at.desc()).first()
     )
     since = datetime.utcnow() - timedelta(hours=24)
     notified = skipped = pushed = push_failed = no_sub = 0
@@ -65,7 +66,8 @@ def send_outreach(
         notified += 1
         if push_svc.configured() and db.query(models.PushSubscription).filter(models.PushSubscription.user_id == user_of[m["donor_id"]]).count() == 0:
             no_sub += 1  # this donor never enabled push on any browser (or the table was reset by a re-seed)
-        ok, bad = push_svc.send_to_user(db, user_of[m["donor_id"]], "BloodLine", message)
+        # The faculty experience is synthetic: never deliver real push messages.
+        ok, bad = (0, 0) if user.is_demo else push_svc.send_to_user(db, user_of[m["donor_id"]], "BloodLine", message)
         pushed += ok
         push_failed += bad
     audit.log(db, user.id, "outreach_sent", f"{group.value}: {notified} notified of {len(matches)} matched, {pushed} pushed")

@@ -7,6 +7,7 @@ from .. import models, schemas, auth
 from ..database import get_db
 from ..services.donor_matching import match_donors
 from ..services.geo import haversine_km
+from ..services import demo_scope
 
 router = APIRouter(prefix="/donors", tags=["donors"])
 
@@ -23,8 +24,8 @@ def get_donor_matches(
     recommendation only — final medical eligibility is decided by Medical/
     Screening Staff, never automatically by this endpoint.
     """
-    donors = db.query(models.Donor).all()
-    bank = db.query(models.BloodBank).first()
+    bank = demo_scope.bank(db, user, user.staff_profile.blood_bank_id if user.staff_profile else None)
+    donors = demo_scope.donors(db, user).all()
     donor_dicts = [
         {
             "donor_id": d.id,

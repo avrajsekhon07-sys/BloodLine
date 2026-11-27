@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from .. import models, schemas, auth
 from ..database import get_db
 from ..services.forecasting import forecast_demand
+from ..services import demo_scope
 
 router = APIRouter(prefix="/forecast", tags=["forecast"])
 
@@ -17,8 +18,9 @@ def get_forecast(
     db: Session = Depends(get_db),
     user: models.UserAccount = Depends(auth.require_roles("blood_bank_manager", "system_admin")),
 ):
+    demo_scope.bank(db, user, blood_bank_id)
     rows = (
-        db.query(models.DemandHistory)
+        demo_scope.demand(db, user)
         .filter(
             models.DemandHistory.blood_bank_id == blood_bank_id,
             models.DemandHistory.blood_group == blood_group,

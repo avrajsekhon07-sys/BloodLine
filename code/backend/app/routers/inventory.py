@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from .. import models, schemas, auth, audit
 from ..services import units as units_svc
 from ..database import get_db
+from ..services import demo_scope
 
 router = APIRouter(prefix="/inventory", tags=["inventory"])
 
@@ -17,7 +18,7 @@ def list_inventory(
     db: Session = Depends(get_db),
     user: models.UserAccount = Depends(auth.require_roles(*STAFF_ROLES)),
 ):
-    q = db.query(models.Inventory)
+    q = demo_scope.inventory(db, user)
     if blood_bank_id:
         q = q.filter(models.Inventory.blood_bank_id == blood_bank_id)
     return q.all()
@@ -31,7 +32,7 @@ def list_recent_transactions(
     user: models.UserAccount = Depends(auth.require_roles(*STAFF_ROLES)),
 ):
     """Most recent stock movements, newest first — for the inventory staff activity feed."""
-    q = db.query(models.InventoryTransaction).join(models.Inventory)
+    q = demo_scope.transactions(db, user)
     if blood_bank_id:
         q = q.filter(models.Inventory.blood_bank_id == blood_bank_id)
     rows = q.order_by(models.InventoryTransaction.created_at.desc()).limit(limit).all()
@@ -61,9 +62,10 @@ def record_transaction(
     """
     if payload.quantity_units <= 0:
         raise HTTPException(400, "quantity_units must be a positive number")
+    demo_scope.bank(db, user, payload.blood_bank_id)
 
     inv = (
-        db.query(models.Inventory)
+        demo_scope.inventory(db, user)
         .filter(
             models.Inventory.blood_bank_id == payload.blood_bank_id,
             models.Inventory.blood_group == payload.blood_group,

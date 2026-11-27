@@ -282,6 +282,98 @@ def test_safe_bootstrap_is_idempotent_and_additive(client):
     assert client.get("/regional/overview", headers=admin_headers).status_code == 200
 
 
+def test_production_demo_accounts_are_isolated_from_real_admin_and_inventory(client, monkeypatch):
+    from app import models
+    from app.database import SessionLocal
+    from app.services import ratelimit
+
+    db = SessionLocal()
+    fixture_emails = {
+        "manager@bloodline.demo", "inventory@bloodline.demo", "screening@bloodline.demo",
+        "hospital@bloodline.demo", "admin@bloodline.demo",
+        *(f"donor{i}@bloodline.demo" for i in range(1, 16)),
+    }
+    for user in db.query(models.UserAccount).filter(models.UserAccount.email.in_(fixture_emails)).all():
+        user.is_demo = True
+    for bank in db.query(models.BloodBank).filter(models.BloodBank.name.like("%Blood Bank%" )).all():
+        if bank.name == "Patiala Central Blood Bank" or "(synthetic)" in bank.name:
+            bank.is_demo = True
+    hospital = db.query(models.Hospital).filter_by(name="Rajindra Government Hospital").one()
+    hospital.is_demo = True
+    real_bank = models.BloodBank(
+        name="Scope Isolation Fixture (test)", address="Synthetic test location", is_demo=False,
+    )
+    db.add(real_bank)
+    db.flush()
+    real_inventory = models.Inventory(
+        blood_bank_id=real_bank.id, blood_group=models.BloodGroup.A_POS,
+        component="whole_blood", quantity_units=57,
+    )
+    db.add(real_inventory)
+    real_admin_role = db.query(models.Role).filter_by(name=models.RoleName.SYSTEM_ADMIN).one()
+    from app import auth
+    real_admin_user = models.UserAccount(
+        email="real-admin-isolation-test@example.invalid", full_name="Real Admin Test Fixture",
+        hashed_password=auth.hash_password("test-only-strong-password"), role_id=real_admin_role.id,
+        is_active=True, is_demo=False,
+    )
+    db.add(real_admin_user)
+    db.commit()
+    real_admin_id = real_admin_user.id
+    demo_bank = db.query(models.BloodBank).filter_by(name="Patiala Central Blood Bank", is_demo=True).one()
+    real_before = db.query(models.Inventory).filter_by(blood_bank_id=real_bank.id, blood_group=models.BloodGroup.A_POS).one().quantity_units
+    demo_donor_ids = {d.id for d in db.query(models.Donor).join(models.UserAccount).filter(models.UserAccount.is_demo.is_(True)).all()}
+    db.close()
+
+    monkeypatch.setenv("BLOODLINE_ENV", "production")
+    monkeypatch.setenv("BLOODLINE_FACULTY_DEMO", "1")
+    monkeypatch.setenv("BLOODLINE_DEMO_LOGIN", "0")
+    monkeypatch.setenv("BLOODLINE_DEMO_TOOLS", "0")
+    ratelimit.limiter.clear()
+
+    catalog = client.get("/auth/demo-accounts")
+    assert catalog.status_code == 200
+    assert len([u for u in catalog.json() if u["role"] != "donor"]) == 5
+    assert len([u for u in catalog.json() if u["role"] == "donor"]) == 15
+    demo_admin = client.post("/auth/demo-login", json={"email": "admin@bloodline.demo"})
+    demo_manager = client.post("/auth/demo-login", json={"email": "manager@bloodline.demo"})
+    assert demo_admin.status_code == demo_manager.status_code == 200
+    da = {"Authorization": "Bearer " + demo_admin.json()["access_token"]}
+    dm = {"Authorization": "Bearer " + demo_manager.json()["access_token"]}
+
+    assert client.post("/admin/users", headers=da, json={
+        "full_name": "Not allowed", "email": "blocked@example.invalid", "password": "longenough1", "role": "inventory_staff",
+    }).status_code == 403
+    assert client.get("/admin/summary", headers=da).json()["total_users"] == 20
+    assert len(client.get("/admin/users", headers=da).json()) == 20
+
+    demo_banks = client.get("/regional/banks", headers=dm).json()
+    real_admin_token = auth.create_access_token({"sub": real_admin_id, "demo": False})
+    ra = {"Authorization": "Bearer " + real_admin_token}
+    real_banks = client.get("/regional/banks", headers=ra).json()
+    assert {b["id"] for b in demo_banks} == {demo_bank.id} | {
+        b["id"] for b in demo_banks if "(synthetic)" in b["name"]
+    }
+    assert all(not b["name"].startswith("Demo Blood Bank") and b["id"] != demo_bank.id for b in real_banks)
+    assert all(u["email"] not in fixture_emails for u in client.get("/admin/users", headers=ra).json())
+    assert client.get(f"/inventory?blood_bank_id={real_bank.id}", headers=dm).json() == []
+
+    match_rows = client.get("/donors/match/O-", headers=dm).json()
+    assert all(row["donor_id"] in demo_donor_ids for row in match_rows)
+    before_demo = client.get(f"/inventory?blood_bank_id={demo_bank.id}", headers=dm).json()
+    assert client.post("/demo/scenario", headers=dm, json={
+        "blood_group": "A+", "action": "shortage", "blood_bank_id": demo_bank.id,
+    }).status_code == 200
+    after_demo = client.get(f"/inventory?blood_bank_id={demo_bank.id}", headers=dm).json()
+    assert next(i["quantity_units"] for i in after_demo if i["blood_group"] == "A+") == 3
+    assert any(i["quantity_units"] != 3 for i in before_demo if i["blood_group"] == "A+")
+
+    db = SessionLocal()
+    assert db.query(models.Inventory).filter_by(blood_bank_id=real_bank.id, blood_group=models.BloodGroup.A_POS).one().quantity_units == real_before
+    db.close()
+    assert client.post("/auth/demo-login", json={"email": "initial-admin@example.com"}).status_code == 401
+
+
 def test_destructive_seed_refuses_production_and_non_sqlite(client, monkeypatch):
     from app import models, seed
     from app.database import SessionLocal

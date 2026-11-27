@@ -6,6 +6,7 @@ from .. import models, schemas, auth, audit
 from ..services import units as units_svc
 from ..database import get_db
 from .hospital import _to_out
+from ..services import demo_scope
 
 router = APIRouter(prefix="/requests", tags=["requests"])
 
@@ -18,7 +19,7 @@ def list_requests(
     db: Session = Depends(get_db),
     user: models.UserAccount = Depends(auth.require_roles(*MANAGER_ROLES)),
 ):
-    q = db.query(models.BloodRequest)
+    q = demo_scope.requests(db, user)
     if status:
         q = q.filter(models.BloodRequest.status == status)
     rows = q.order_by(models.BloodRequest.created_at.desc()).all()
@@ -42,20 +43,20 @@ def approve_request(
     with a note, rather than silently failing — the shortage-risk / donor
     matching workflow is how that gap gets closed.
     """
-    req = db.query(models.BloodRequest).filter(models.BloodRequest.id == request_id).first()
+    req = demo_scope.requests(db, user).filter(models.BloodRequest.id == request_id).first()
     if req is None:
         raise HTTPException(404, "Request not found")
     if req.status != "pending":
         raise HTTPException(400, f"Request is already '{req.status}', cannot approve again")
 
     if blood_bank_id is None:
-        bank = db.query(models.BloodBank).first()
-        if bank is None:
-            raise HTTPException(400, "No blood bank found — run `python -m app.bootstrap` first.")
+        bank = demo_scope.bank(db, user)
         blood_bank_id = bank.id
+    else:
+        demo_scope.bank(db, user, blood_bank_id)
 
     inv = (
-        db.query(models.Inventory)
+        demo_scope.inventory(db, user)
         .filter(
             models.Inventory.blood_bank_id == blood_bank_id,
             models.Inventory.blood_group == req.blood_group,
@@ -94,7 +95,7 @@ def reject_request(
     db: Session = Depends(get_db),
     user: models.UserAccount = Depends(auth.require_roles(*MANAGER_ROLES)),
 ):
-    req = db.query(models.BloodRequest).filter(models.BloodRequest.id == request_id).first()
+    req = demo_scope.requests(db, user).filter(models.BloodRequest.id == request_id).first()
     if req is None:
         raise HTTPException(404, "Request not found")
     if req.status != "pending":

@@ -8,7 +8,7 @@ import os
 from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -55,7 +55,11 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         raise credentials_exception
 
     user = db.query(models.UserAccount).filter(models.UserAccount.id == user_id).first()
-    if user is None or not user.is_active:
+    if (
+        user is None
+        or not user.is_active
+        or bool(payload.get("demo", False)) != bool(user.is_demo)
+    ):
         raise credentials_exception
     return user
 
@@ -63,12 +67,14 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
 def require_roles(*allowed_roles: str):
     """Dependency factory: require the current user's role to be one of allowed_roles."""
 
-    def _check(user: models.UserAccount = Depends(get_current_user)) -> models.UserAccount:
+    def _check(request: Request, user: models.UserAccount = Depends(get_current_user)) -> models.UserAccount:
         if user.role.name.value not in allowed_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Role '{user.role.name.value}' is not permitted to access this resource.",
             )
+        if user.is_demo and user.role.name.value == "system_admin" and request.method not in ("GET", "HEAD", "OPTIONS"):
+            raise HTTPException(403, "The synthetic Admin account is read-only.")
         return user
 
     return _check

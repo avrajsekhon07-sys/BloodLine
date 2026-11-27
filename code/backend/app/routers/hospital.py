@@ -12,6 +12,8 @@ def _resolve_hospital(db: Session, user: models.UserAccount) -> models.Hospital:
     hu = db.query(models.HospitalUser).filter(models.HospitalUser.user_id == user.id).first()
     if hu is None:
         raise HTTPException(400, "This account is not linked to a hospital.")
+    if bool(hu.hospital.is_demo) != bool(user.is_demo):
+        raise HTTPException(403, "This account cannot access the linked hospital.")
     return hu.hospital
 
 

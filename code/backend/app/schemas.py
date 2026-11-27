@@ -10,11 +10,16 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class DemoLoginRequest(BaseModel):
+    email: EmailStr
+
+
 class LoginResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     role: str
     full_name: str
+    is_demo: bool = False
 
 
 # ---- Inventory ----

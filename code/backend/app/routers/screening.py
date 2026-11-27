@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from .. import models, schemas, auth, audit
 from ..database import get_db
 from ..services.donor_matching import DONATION_COOLDOWN_DAYS, days_since
+from ..services import demo_scope
 
 router = APIRouter(prefix="/screening", tags=["screening"])
 
@@ -28,7 +29,7 @@ def list_candidates(
     i.e. worth screening next. This does not decide eligibility; it's a
     worklist for medical staff, same principle as donor matching.
     """
-    donors = db.query(models.Donor).all()
+    donors = demo_scope.donors(db, user).all()
     out = []
     for d in donors:
         gap = days_since(d.last_donation_date)
@@ -62,9 +63,7 @@ def record_screening(
     if payload.outcome not in ("eligible", "deferred", "rejected"):
         raise HTTPException(400, "outcome must be one of: eligible, deferred, rejected")
 
-    donor = db.query(models.Donor).filter(models.Donor.id == payload.donor_id).first()
-    if donor is None:
-        raise HTTPException(404, "Donor not found")
+    donor = demo_scope.donor(db, user, payload.donor_id)
 
     staff = _resolve_staff(db, user)
 
@@ -100,9 +99,7 @@ def get_donor_screening_history(
     db: Session = Depends(get_db),
     user: models.UserAccount = Depends(auth.require_roles(*SCREENING_ROLES)),
 ):
-    donor = db.query(models.Donor).filter(models.Donor.id == donor_id).first()
-    if donor is None:
-        raise HTTPException(404, "Donor not found")
+    donor = demo_scope.donor(db, user, donor_id)
 
     records = (
         db.query(models.ScreeningRecord)

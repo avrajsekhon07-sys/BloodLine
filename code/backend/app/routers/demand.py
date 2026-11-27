@@ -1,9 +1,10 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from .. import models, schemas, auth
 from ..database import get_db
+from ..services import demo_scope
 
 router = APIRouter(prefix="/demand", tags=["demand"])
 
@@ -24,13 +25,13 @@ def get_demand_history(
     already pass blood_bank_id explicitly are unaffected.
     """
     if blood_bank_id is None:
-        bank = db.query(models.BloodBank).first()
-        if bank is None:
-            raise HTTPException(400, "No blood bank found — run `python -m app.bootstrap` first.")
+        bank = demo_scope.bank(db, user)
         blood_bank_id = bank.id
+    else:
+        demo_scope.bank(db, user, blood_bank_id)
 
     rows = (
-        db.query(models.DemandHistory)
+        demo_scope.demand(db, user)
         .filter(
             models.DemandHistory.blood_bank_id == blood_bank_id,
             models.DemandHistory.blood_group == blood_group,

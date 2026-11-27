@@ -71,6 +71,8 @@ class UserAccount(Base):
     full_name = Column(String, nullable=False)
     role_id = Column(String, ForeignKey("roles.id"), nullable=False)
     is_active = Column(Boolean, default=True)
+    # Demo identities are isolated from production identities and data at every API boundary.
+    is_demo = Column(Boolean, nullable=False, default=False, server_default="false")
     created_at = Column(DateTime, default=datetime.utcnow)
 
     role = relationship("Role", back_populates="users")
@@ -136,6 +138,7 @@ class BloodBank(Base):
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
     address = Column(String, nullable=True)
+    is_demo = Column(Boolean, nullable=False, default=False, server_default="false")
 
     inventory_items = relationship("Inventory", back_populates="blood_bank")
     demand_history = relationship("DemandHistory", back_populates="blood_bank")
@@ -289,6 +292,7 @@ class Hospital(Base):
     id = Column(String, primary_key=True, default=gen_id)
     name = Column(String, nullable=False)
     address = Column(String, nullable=True)
+    is_demo = Column(Boolean, nullable=False, default=False, server_default="false")
 
     hospital_users = relationship("HospitalUser", back_populates="hospital")
     requests = relationship("BloodRequest", back_populates="hospital")

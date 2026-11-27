@@ -1,12 +1,13 @@
 import pandas as pd
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from .. import models, schemas, auth
 from ..database import get_db
 from ..services.forecasting import forecast_demand
 from ..services.risk import assess_risk
+from ..services import demo_scope
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -20,12 +21,12 @@ def reports_summary(
     user: models.UserAccount = Depends(auth.require_roles(*MANAGER_ROLES)),
 ):
     if blood_bank_id is None:
-        bank = db.query(models.BloodBank).first()
-        if bank is None:
-            raise HTTPException(400, "No blood bank found — run `python -m app.bootstrap` first.")
+        bank = demo_scope.bank(db, user)
         blood_bank_id = bank.id
+    else:
+        demo_scope.bank(db, user, blood_bank_id)
 
-    inventory_rows = db.query(models.Inventory).filter(models.Inventory.blood_bank_id == blood_bank_id).all()
+    inventory_rows = demo_scope.inventory(db, user).filter(models.Inventory.blood_bank_id == blood_bank_id).all()
     total_inventory = sum(i.quantity_units for i in inventory_rows)
 
     inv_ids = [i.id for i in inventory_rows]
@@ -43,7 +44,7 @@ def reports_summary(
         inventory_by_group[bg] = inv.quantity_units
 
         demand_rows = (
-            db.query(models.DemandHistory)
+            demo_scope.demand(db, user)
             .filter(
                 models.DemandHistory.blood_bank_id == blood_bank_id,
                 models.DemandHistory.blood_group == inv.blood_group,
@@ -69,7 +70,7 @@ def reports_summary(
 
     requests_summary = {}
     for status in ("pending", "fulfilled", "rejected", "cancelled"):
-        requests_summary[status] = db.query(models.BloodRequest).filter(models.BloodRequest.status == status).count()
+        requests_summary[status] = demo_scope.requests(db, user).filter(models.BloodRequest.status == status).count()
 
     return schemas.ReportsSummaryOut(
         blood_bank_id=blood_bank_id,

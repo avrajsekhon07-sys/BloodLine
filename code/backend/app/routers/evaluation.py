@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from .. import models, auth
 from ..database import get_db
 from ..services import evaluation as ev
+from ..services import demo_scope
 
 router = APIRouter(prefix="/evaluation", tags=["evaluation"])
 
@@ -23,9 +24,9 @@ def evaluation_report(
     db: Session = Depends(get_db),
     user: models.UserAccount = Depends(auth.require_roles("blood_bank_manager", "system_admin")),
 ):
-    bank = db.query(models.BloodBank).filter(models.BloodBank.id == blood_bank_id).first() if blood_bank_id else db.query(models.BloodBank).first()
+    bank = demo_scope.bank(db, user, blood_bank_id)
     rows = (
-        db.query(models.DemandHistory).filter(models.DemandHistory.blood_bank_id == bank.id)
+        demo_scope.demand(db, user).filter(models.DemandHistory.blood_bank_id == bank.id)
         .order_by(models.DemandHistory.date).all()
     ) if bank else []
     by = defaultdict(list)
@@ -37,9 +38,13 @@ def evaluation_report(
         {"donor_id": d.id, "full_name": d.user.full_name, "blood_group": d.blood_group.value,
          "last_donation_date": d.last_donation_date, "is_available": d.is_available,
          "notification_consent": d.notification_consent}
-        for d in db.query(models.Donor).all()
+        for d in demo_scope.donors(db, user).all()
     ]
-    notified = db.query(models.DonorNotification).all()
+    notified = (
+        db.query(models.DonorNotification)
+        .join(models.Donor).join(models.UserAccount)
+        .filter(models.UserAccount.is_demo.is_(bool(user.is_demo))).all()
+    )
     consent = {d["donor_id"]: d["notification_consent"] for d in donors}
     return {
         "generated_at": datetime.utcnow().isoformat() + "Z",

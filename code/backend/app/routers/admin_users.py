@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas, auth, audit
 from ..database import get_db
+from ..services.demo_scope import require_real_admin
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 ADMIN = ("system_admin",)
@@ -31,12 +32,12 @@ def _role(db: Session, name: str) -> models.Role:
 def _ensure_profile(db: Session, user: models.UserAccount, role_name: str, p):
     """Create the role-specific profile row that the role's workflows depend on."""
     if role_name in STAFF_ROLES and user.staff_profile is None:
-        bank = db.query(models.BloodBank).filter(models.BloodBank.id == p.get("blood_bank_id")).first() if p.get("blood_bank_id") else db.query(models.BloodBank).first()
+        bank = db.query(models.BloodBank).filter(models.BloodBank.id == p.get("blood_bank_id"), models.BloodBank.is_demo.is_(False)).first() if p.get("blood_bank_id") else db.query(models.BloodBank).filter(models.BloodBank.is_demo.is_(False)).first()
         if bank is None:
             raise HTTPException(400, "No blood bank found for this staff account.")
         db.add(models.Staff(user_id=user.id, blood_bank_id=bank.id, designation=role_name))
     elif role_name == "hospital_coordinator" and user.hospital_user_profile is None:
-        h = db.query(models.Hospital).filter(models.Hospital.id == p.get("hospital_id")).first() if p.get("hospital_id") else db.query(models.Hospital).first()
+        h = db.query(models.Hospital).filter(models.Hospital.id == p.get("hospital_id"), models.Hospital.is_demo.is_(False)).first() if p.get("hospital_id") else db.query(models.Hospital).filter(models.Hospital.is_demo.is_(False)).first()
         if h is None:
             raise HTTPException(400, "No hospital found for this coordinator account.")
         db.add(models.HospitalUser(user_id=user.id, hospital_id=h.id))
@@ -54,6 +55,7 @@ def create_user(
     db: Session = Depends(get_db),
     admin: models.UserAccount = Depends(auth.require_roles(*ADMIN)),
 ):
+    require_real_admin(admin)
     if len(payload.password) < 8:
         raise HTTPException(400, "Password must be at least 8 characters")
     if db.query(models.UserAccount).filter(models.UserAccount.email == payload.email).first():
@@ -80,8 +82,9 @@ def update_user(
     db: Session = Depends(get_db),
     admin: models.UserAccount = Depends(auth.require_roles(*ADMIN)),
 ):
+    require_real_admin(admin)
     user = db.query(models.UserAccount).filter(models.UserAccount.id == user_id).first()
-    if user is None:
+    if user is None or user.is_demo:
         raise HTTPException(404, "User not found")
     if user.id == admin.id and (payload.is_active is False or (payload.role and payload.role != "system_admin")):
         raise HTTPException(400, "You cannot deactivate or demote your own account")
@@ -110,7 +113,12 @@ def audit_log(
     db: Session = Depends(get_db),
     admin: models.UserAccount = Depends(auth.require_roles(*ADMIN)),
 ):
-    rows = db.query(models.AuditLog).order_by(models.AuditLog.created_at.desc()).limit(limit).all()
+    rows = (
+        db.query(models.AuditLog)
+        .join(models.UserAccount, models.AuditLog.user_id == models.UserAccount.id)
+        .filter(models.UserAccount.is_demo.is_(bool(admin.is_demo)))
+        .order_by(models.AuditLog.created_at.desc()).limit(limit).all()
+    )
     return [
         schemas.AuditLogOut(id=r.id, created_at=r.created_at, user_name=r.user.full_name if r.user else None, action=r.action, detail=r.detail)
         for r in rows

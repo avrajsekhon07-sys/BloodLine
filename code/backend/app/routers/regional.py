@@ -11,6 +11,7 @@ from ..database import get_db
 from ..services.forecasting import forecast_demand
 from ..services.regional import plan_redistribution, surplus_units
 from ..services.risk import assess_risk
+from ..services import demo_scope
 
 router = APIRouter(prefix="/regional", tags=["regional"])
 STAFF = ("blood_bank_manager", "system_admin", "inventory_staff", "medical_staff")
@@ -45,12 +46,12 @@ def _bank_view(db: Session, bank: models.BloodBank) -> dict:
 @router.get("/banks")
 def list_banks(db: Session = Depends(get_db), user: models.UserAccount = Depends(auth.require_roles(*STAFF))):
     return [{"id": b.id, "name": b.name, "address": b.address, "latitude": b.latitude, "longitude": b.longitude}
-            for b in db.query(models.BloodBank).order_by(models.BloodBank.name).all()]
+            for b in demo_scope.banks(db, user).order_by(models.BloodBank.name).all()]
 
 
 @router.get("/overview")
 def regional_overview(db: Session = Depends(get_db), user: models.UserAccount = Depends(auth.require_roles(*MANAGERS))):
-    banks = [_bank_view(db, b) for b in db.query(models.BloodBank).order_by(models.BloodBank.name).all()]
+    banks = [_bank_view(db, b) for b in demo_scope.banks(db, user).order_by(models.BloodBank.name).all()]
     for b in banks:
         levels = [g["risk_level"] for g in b["groups"].values()]
         b["worst_risk"] = "HIGH" if "HIGH" in levels else "MODERATE" if "MODERATE" in levels else "LOW" if levels else None
@@ -63,7 +64,7 @@ def redistribution_suggestions(
     db: Session = Depends(get_db),
     user: models.UserAccount = Depends(auth.require_roles(*MANAGERS)),
 ):
-    banks = [_bank_view(db, b) for b in db.query(models.BloodBank).all()]
+    banks = [_bank_view(db, b) for b in demo_scope.banks(db, user).all()]
     return {
         "note": "Suggestions only. BloodLine does not move blood; authorised blood-centre staff must approve and carry out any transfer.",
         "suggestions": plan_redistribution(banks, max_distance_km),

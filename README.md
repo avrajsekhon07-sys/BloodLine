@@ -139,9 +139,9 @@ cd code/frontend
 python3 -m http.server 5500
 ```
 
-Open <http://localhost:5500>. The frontend uses `code/frontend/config.js`; local development defaults to `http://localhost:8000`. Production static builds inject the API origin using `BLOODLINE_API_URL` and turn demo mode off. Interactive API documentation is at <http://localhost:8000/docs> and the health endpoint is <http://localhost:8000/health>.
+Open <http://localhost:5500>. The frontend uses `code/frontend/config.js`; local development defaults to `http://localhost:8000`. Production static builds inject the API origin using `BLOODLINE_API_URL`. The original demo shortcut UI is enabled only when `BLOODLINE_FACULTY_DEMO=1` is set for the static build and API. Interactive API documentation is at <http://localhost:8000/docs> and the health endpoint is <http://localhost:8000/health>.
 
-The recommended local setup above uses the safe, additive bootstrap and creates synthetic inventory and 180 days of demand history. For the richer disposable demo walkthrough with synthetic donors and workflow fixtures, first use the seed command below instead of bootstrap. The seed script drops and recreates tables; it refuses production mode, non-SQLite databases, and runs without explicit `BLOODLINE_ALLOW_DESTRUCTIVE_SEED=1`, and it prompts for a local-only demo password. Never run it against data you need to keep. The local demo picker never fills or submits a password and is disabled in production builds.
+The recommended local setup above uses the safe, additive bootstrap and creates synthetic inventory and 180 days of demand history. For a disposable local demo walkthrough with the original five non-donor accounts, 15 synthetic donors, and workflow fixtures, use the seed command below instead of bootstrap. The seed script drops and recreates tables; it refuses production mode, non-SQLite databases, and runs without explicit `BLOODLINE_ALLOW_DESTRUCTIVE_SEED=1`, and it prompts for a local-only demo password. Never run it against data you need to keep. The public faculty demo uses separately provisioned synthetic accounts and a restricted short-lived demo login token; it never uses the historical shared password.
 
 Optional disposable demo fixture setup (run this instead of bootstrap):
 
@@ -161,13 +161,14 @@ The checked-in `.env.example` at the repository root is a template for Docker Co
 | `ALLOWED_ORIGINS` | Comma separated CORS origins | `*` only for local development; production requires exact HTTPS origins without paths |
 | `BLOODLINE_USE_MIGRATIONS` | Set `1` to have Alembic manage schema | unset: `create_all` |
 | `BLOODLINE_SARIMA` | Set `0` to disable SARIMA candidate | enabled when dependency/history support it |
-| `BLOODLINE_DEMO_TOOLS` | Enable simulated planning tools | enabled by default only in local development; all `/demo/*` endpoints return 404 in production |
-| `BLOODLINE_DEMO_LOGIN` | Expose demo account picker endpoint | enabled locally; production must set `0` and production mode forces it off |
+| `BLOODLINE_DEMO_TOOLS` | Enable simulated planning tools for ordinary accounts | enabled locally; ordinary accounts get 404 in production; the faculty demo toggle enables only scoped synthetic scenario use |
+| `BLOODLINE_DEMO_LOGIN` | Legacy local demo-account picker setting | enabled locally; keep `0` in production |
+| `BLOODLINE_FACULTY_DEMO` | Enable the original synthetic faculty demo shortcuts and restricted login | disabled by default; opt in on both API and static build |
 | `LOGIN_RATE_LIMIT`, `LOGIN_MAX_ATTEMPTS`, `LOGIN_MAX_ATTEMPTS_PER_IP`, `LOGIN_WINDOW_SECONDS` | Login throttling controls | Rate limited; defaults and overrides in `code/backend/app/services/ratelimit.py` |
 | `BLOODLINE_SHELF_<COMPONENT>` | Configure component shelf life planning values | Defaults in inventory/unit service; values are not medical guidance |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Optional Web Push configuration | Push disabled until configured |
 
-For local use, the database and key defaults are sufficient. For PostgreSQL Docker Compose, set `POSTGRES_PASSWORD` and `BLOODLINE_SECRET_KEY`, configure `ALLOWED_ORIGINS`, and optionally set VAPID keys. Production must use PostgreSQL, a unique `BLOODLINE_SECRET_KEY`, `BLOODLINE_ENV=production`, `BLOODLINE_USE_MIGRATIONS=1`, `BLOODLINE_DEMO_LOGIN=0`, and `BLOODLINE_DEMO_TOOLS=0`. Never place initial administrator credentials in `.env.example` or Git. The exact login throttle defaults are 5 attempts per account/IP, 20 per IP and a 900 second window; see `code/backend/app/services/ratelimit.py` and `.env.example` for supported overrides.
+For local use, the database and key defaults are sufficient. For PostgreSQL Docker Compose, set `POSTGRES_PASSWORD` and `BLOODLINE_SECRET_KEY`, configure `ALLOWED_ORIGINS`, and optionally set VAPID keys. Production must use PostgreSQL, a unique `BLOODLINE_SECRET_KEY`, `BLOODLINE_ENV=production`, `BLOODLINE_USE_MIGRATIONS=1`, `BLOODLINE_DEMO_LOGIN=0`, and `BLOODLINE_DEMO_TOOLS=0`. The original faculty picker can be enabled with `BLOODLINE_FACULTY_DEMO=1` after applying the additive demo-scope migration and running `python -m app.bootstrap_demo`; see [the Render deployment runbook](docs/deployment-render.md). Never place initial administrator credentials in `.env.example` or Git. The exact login throttle defaults are 5 attempts per account/IP, 20 per IP and a 900 second window; see `code/backend/app/services/ratelimit.py` and `.env.example` for supported overrides.
 
 ## Docker
 

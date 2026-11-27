@@ -16,6 +16,7 @@ from ..database import get_db
 from ..services import units as units_svc
 from ..services.forecasting import forecast_demand
 from ..services.risk import assess_risk
+from ..services import demo_scope
 
 router = APIRouter(prefix="/demo", tags=["demo"])
 MANAGERS = ("blood_bank_manager", "system_admin")
@@ -26,21 +27,23 @@ def tools_enabled() -> bool:
     return os.getenv("BLOODLINE_DEMO_TOOLS", "1") == "1" and os.getenv("BLOODLINE_ENV") != "production"
 
 
-def require_demo_tools():
-    if not tools_enabled():
+def require_demo_tools(user):
+    enabled = (
+        os.getenv("BLOODLINE_FACULTY_DEMO") == "1"
+        if user.is_demo and os.getenv("BLOODLINE_ENV") == "production"
+        else tools_enabled()
+    )
+    if not enabled:
         raise HTTPException(404, "Not found")
 
 
-def _bank(db, bank_id):
-    bank = db.query(models.BloodBank).filter(models.BloodBank.id == bank_id).first() if bank_id else db.query(models.BloodBank).first()
-    if bank is None:
-        raise HTTPException(404, "Blood bank not found")
-    return bank
+def _bank(db, bank_id, user):
+    return demo_scope.bank(db, user, bank_id)
 
 
 @router.get("/status")
 def status(user: models.UserAccount = Depends(auth.require_roles(*MANAGERS))):
-    require_demo_tools()
+    require_demo_tools(user)
     return {"scenario_tools": True}
 
 
@@ -51,15 +54,15 @@ def what_if(
     db: Session = Depends(get_db),
     user: models.UserAccount = Depends(auth.require_roles(*MANAGERS)),
 ):
-    require_demo_tools()
-    bank = _bank(db, blood_bank_id)
+    require_demo_tools(user)
+    bank = _bank(db, blood_bank_id, user)
     stock = defaultdict(int)
-    for inv in db.query(models.Inventory).filter(models.Inventory.blood_bank_id == bank.id).all():
+    for inv in demo_scope.inventory(db, user).filter(models.Inventory.blood_bank_id == bank.id).all():
         stock[inv.blood_group.value] += inv.quantity_units
     out = []
     for g, qty in stock.items():
         rows = (
-            db.query(models.DemandHistory)
+            demo_scope.demand(db, user)
             .filter(models.DemandHistory.blood_bank_id == bank.id, models.DemandHistory.blood_group == g)
             .order_by(models.DemandHistory.date).all()
         )
@@ -90,16 +93,16 @@ def scenario(
     db: Session = Depends(get_db),
     user: models.UserAccount = Depends(auth.require_roles(*MANAGERS)),
 ):
-    require_demo_tools()
+    require_demo_tools(user)
     if payload.action not in ("shortage", "restock"):
         raise HTTPException(400, "action must be 'shortage' or 'restock'")
     try:
         group = models.BloodGroup(payload.blood_group)
     except ValueError:
         raise HTTPException(400, "Unknown blood_group")
-    bank = _bank(db, payload.blood_bank_id)
+    bank = _bank(db, payload.blood_bank_id, user)
     inv = (
-        db.query(models.Inventory)
+        demo_scope.inventory(db, user)
         .filter(models.Inventory.blood_bank_id == bank.id, models.Inventory.blood_group == group, models.Inventory.component == "whole_blood")
         .first()
     )

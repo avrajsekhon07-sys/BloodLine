@@ -1,5 +1,6 @@
 import os
 import re
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
@@ -12,6 +13,12 @@ from ..services.donor_matching import DONATION_COOLDOWN_DAYS, days_since
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 MIN_PASSWORD_LEN = 8
+
+
+def faculty_demo_enabled():
+    if os.getenv("BLOODLINE_ENV") == "production":
+        return os.getenv("BLOODLINE_FACULTY_DEMO") == "1"
+    return os.getenv("BLOODLINE_DEMO_LOGIN", "1") != "0"
 
 
 @router.post("/login", response_model=schemas.LoginResponse)
@@ -40,8 +47,8 @@ def login(payload: schemas.LoginRequest, request: Request, db: Session = Depends
     ratelimit.limiter.reset(ip, payload.email)
     audit.log(db, user.id, "login", payload.email)
     db.commit()
-    token = auth.create_access_token({"sub": user.id})
-    return schemas.LoginResponse(access_token=token, role=user.role.name.value, full_name=user.full_name)
+    token = auth.create_access_token({"sub": user.id, "demo": bool(user.is_demo)})
+    return schemas.LoginResponse(access_token=token, role=user.role.name.value, full_name=user.full_name, is_demo=bool(user.is_demo))
 
 
 @router.post("/register-donor", response_model=schemas.LoginResponse, status_code=201)
@@ -75,7 +82,7 @@ def register_donor(payload: schemas.RegisterDonorRequest, db: Session = Depends(
     audit.log(db, user.id, "donor_registered", payload.email)
     db.commit()
     return schemas.LoginResponse(
-        access_token=auth.create_access_token({"sub": user.id}), role="donor", full_name=user.full_name,
+        access_token=auth.create_access_token({"sub": user.id, "demo": False}), role="donor", full_name=user.full_name,
     )
 
 
@@ -93,9 +100,12 @@ def demo_accounts(db: Session = Depends(get_db)):
     """Lists the seeded *@bloodline.demo accounts so the demo login page can offer a picker.
     Unauthenticated by design, therefore DEMO ONLY: it is switched off with BLOODLINE_DEMO_LOGIN=0
     and always off when BLOODLINE_ENV=production."""
-    if os.getenv("BLOODLINE_DEMO_LOGIN", "1") != "1" or os.getenv("BLOODLINE_ENV") == "production":
+    if not faculty_demo_enabled():
         raise HTTPException(404, "Not found")
-    users = db.query(models.UserAccount).filter(models.UserAccount.email.like("%@bloodline.demo")).all()
+    query = db.query(models.UserAccount).filter(models.UserAccount.email.like("%@bloodline.demo"))
+    if os.getenv("BLOODLINE_ENV") == "production":
+        query = query.filter(models.UserAccount.is_demo.is_(True))
+    users = query.all()
     out = []
     for u in users:
         row = {"email": u.email, "full_name": u.full_name, "role": u.role.name.value}
@@ -110,3 +120,34 @@ def demo_accounts(db: Session = Depends(get_db)):
         out.append(row)
     num = lambda r: int(re.sub(r"\D", "", r["email"].split("@")[0]) or 0)
     return sorted(out, key=lambda r: (r["role"] == "donor", r["role"], num(r)))
+
+
+@router.post("/demo-login", response_model=schemas.LoginResponse)
+def demo_login(payload: schemas.DemoLoginRequest, request: Request, db: Session = Depends(get_db)):
+    """Issue a short-lived token only for one of the synthetic demo accounts."""
+    if not faculty_demo_enabled():
+        raise HTTPException(404, "Not found")
+    ip = request.client.host if request.client else "unknown"
+    if ratelimit.enabled():
+        wait = ratelimit.limiter.check(ip, payload.email)
+        if wait:
+            raise HTTPException(429, headers={"Retry-After": str(wait)}, detail="Too many demo sign-in attempts.")
+    query = db.query(models.UserAccount).filter(
+        models.UserAccount.email == payload.email,
+        models.UserAccount.email.like("%@bloodline.demo"),
+    )
+    if os.getenv("BLOODLINE_ENV") == "production":
+        query = query.filter(models.UserAccount.is_demo.is_(True))
+    else:
+        query = query.filter(models.UserAccount.email.like("%@bloodline.demo"))
+    user = query.first()
+    if user is None or not user.is_active:
+        ratelimit.limiter.record_failure(ip, payload.email)
+        raise HTTPException(status_code=401, detail="Demo account is unavailable")
+    ratelimit.limiter.reset(ip, payload.email)
+    audit.log(db, user.id, "demo_login", payload.email)
+    db.commit()
+    token = auth.create_access_token(
+        {"sub": user.id, "demo": True}, expires_delta=timedelta(minutes=30)
+    )
+    return schemas.LoginResponse(access_token=token, role=user.role.name.value, full_name=user.full_name, is_demo=True)

@@ -73,8 +73,8 @@ for name in ("index.html", "viz.js", "ml-pages.js", "sw.js"):
     shutil.copy2(ROOT / name, DIST / name)
 (DIST / "config.js").write_text(
     "window.BLOODLINE_CONFIG = "
-    + json.dumps({"apiUrl": API_URL, "demoMode": False})
+    + json.dumps({"apiUrl": API_URL, "demoMode": os.getenv("BLOODLINE_FACULTY_DEMO", "0") == "1"})
     + ";\n",
     encoding="utf-8",
 )
-print(f"Built static BloodLine frontend for {API_URL} (demo mode disabled).")
+print(f"Built static BloodLine frontend for {API_URL} (faculty demo {'enabled' if os.getenv('BLOODLINE_FACULTY_DEMO', '0') == '1' else 'disabled'}).")

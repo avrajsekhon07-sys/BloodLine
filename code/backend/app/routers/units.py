@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, auth, audit
 from ..database import get_db
+from ..services import demo_scope
 
 router = APIRouter(prefix="/units", tags=["units"])
 VIEW = ("inventory_staff", "blood_bank_manager", "system_admin", "medical_staff")
@@ -25,10 +26,15 @@ def expiring_units(
     q = (
         db.query(models.BloodUnit, models.Inventory)
         .join(models.Inventory, models.BloodUnit.inventory_id == models.Inventory.id)
+        .join(models.BloodBank, models.Inventory.blood_bank_id == models.BloodBank.id)
         .filter(models.BloodUnit.status == "available", models.BloodUnit.expiry_date <= today + timedelta(days=days))
+        .filter(models.BloodBank.is_demo.is_(bool(user.is_demo)))
     )
     if blood_bank_id:
+        demo_scope.bank(db, user, blood_bank_id)
         q = q.filter(models.Inventory.blood_bank_id == blood_bank_id)
+    elif user.staff_profile and user.role.name.value in ("inventory_staff", "medical_staff"):
+        q = q.filter(models.Inventory.blood_bank_id == user.staff_profile.blood_bank_id)
     groups = defaultdict(lambda: {"units": 0, "overdue": 0, "earliest_expiry": None})
     for unit, inv in q.all():
         g = groups[(inv.blood_group.value, inv.component)]
@@ -54,10 +60,15 @@ def expire_overdue(
     q = (
         db.query(models.BloodUnit, models.Inventory)
         .join(models.Inventory, models.BloodUnit.inventory_id == models.Inventory.id)
+        .join(models.BloodBank, models.Inventory.blood_bank_id == models.BloodBank.id)
         .filter(models.BloodUnit.status == "available", models.BloodUnit.expiry_date < date.today())
+        .filter(models.BloodBank.is_demo.is_(bool(user.is_demo)))
     )
     if blood_bank_id:
+        demo_scope.bank(db, user, blood_bank_id)
         q = q.filter(models.Inventory.blood_bank_id == blood_bank_id)
+    elif user.staff_profile:
+        q = q.filter(models.Inventory.blood_bank_id == user.staff_profile.blood_bank_id)
     per_inv = defaultdict(list)
     invs = {}
     for unit, inv in q.all():
