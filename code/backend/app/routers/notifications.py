@@ -4,6 +4,7 @@ Alerts go ONLY to donors who pass the matching rules (compatible group,
 available, consent given, cooldown cleared, optional radius). Withdrawing
 consent stops future outreach because consent is checked at send time.
 """
+import os
 from datetime import datetime, timedelta
 from typing import List
 
@@ -65,9 +66,10 @@ def send_outreach(
             continue
         db.add(models.DonorNotification(donor_id=m["donor_id"], alert_id=alert.id if alert else None, message=message))
         notified += 1
+        if os.getenv("BLOODLINE_WEB_PUSH") != "1":
+            continue  # in-app notifications only; set BLOODLINE_WEB_PUSH=1 to also send browser push pop-ups
         if push_svc.configured() and db.query(models.PushSubscription).filter(models.PushSubscription.user_id == user_of[m["donor_id"]]).count() == 0:
             no_sub += 1  # this donor never enabled push on any browser (or the table was reset by a re-seed)
-        # Demo outreach also pushes, so the public demo can show real notifications (messages are synthetic).
         ok, bad = push_svc.send_to_user(db, user_of[m["donor_id"]], "BloodLine", message)
         pushed += ok
         push_failed += bad
