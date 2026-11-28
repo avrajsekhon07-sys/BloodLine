@@ -84,3 +84,41 @@ app.include_router(demo.router)
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.on_event("startup")
+def _start_sarima_warmup():
+    """Fit SARIMA for every bank and blood group in the background after startup, so pages that
+    compare it (dashboard, risk, regional, evaluation) are fast. Off in tests or with BLOODLINE_SARIMA_WARMUP=0."""
+    import sys
+    import threading
+
+    from .services.forecasting import sarima_available, sarima_evaluate
+
+    if "pytest" in sys.modules or os.getenv("BLOODLINE_SARIMA_WARMUP", "1") == "0" or not sarima_available():
+        return
+
+    def run():
+        import pandas as pd
+
+        from . import models
+        from .database import SessionLocal
+
+        db = SessionLocal()
+        try:
+            banks = db.query(models.BloodBank).all()
+            banks.sort(key=lambda b: not getattr(b, "is_demo", False))  # demo banks first: the public demo uses them
+            for bank in banks:
+                rows = (db.query(models.DemandHistory).filter(models.DemandHistory.blood_bank_id == bank.id)
+                        .order_by(models.DemandHistory.date).all())
+                by_group = {}
+                for r in rows:
+                    by_group.setdefault(getattr(r.blood_group, "value", r.blood_group), []).append(r.units_demanded)
+                for values in by_group.values():
+                    sarima_evaluate(pd.Series(values, dtype=float))
+        except Exception as e:  # never let the warm-up affect the running API
+            print("SARIMA warm-up stopped:", e)
+        finally:
+            db.close()
+
+    threading.Thread(target=run, name="sarima-warmup", daemon=True).start()

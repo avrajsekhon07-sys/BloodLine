@@ -103,7 +103,7 @@ def sarima_available(force: bool = False) -> bool:
     return True
 
 
-def sarima_evaluate(series: pd.Series, holdout: int = 14, force: bool = False):
+def sarima_evaluate(series: pd.Series, holdout: int = 14, force: bool = False, cached_only: bool = False):
     """Chronological evaluation + forecast for SARIMA, or None if unavailable.
 
     No leakage: parameters are fitted on data BEFORE the holdout only. The fitted
@@ -119,6 +119,8 @@ def sarima_evaluate(series: pd.Series, holdout: int = 14, force: bool = False):
     key = (n, round(float(values.sum()), 3), round(float(values[-1]), 3))
     if key in _sarima_cache:
         return _sarima_cache[key]
+    if cached_only:  # pages covering many series use SARIMA only once the warm-up has fitted it
+        return None
     try:
         import warnings
         from statsmodels.tsa.statespace.sarimax import SARIMAX
@@ -158,7 +160,8 @@ def select_model(candidates: list) -> dict:
     return min(valid, key=lambda c: (c["mae"], _TIE_ORDER.get(c["name"], 9)))
 
 
-def forecast_demand(df: pd.DataFrame, horizon_days: int = 7, use_sarima: bool = True, force_sarima: bool = False) -> dict:
+def forecast_demand(df: pd.DataFrame, horizon_days: int = 7, use_sarima: bool = True, force_sarima: bool = False,
+                    sarima_cached_only: bool = False) -> dict:
     """
     df: DataFrame with columns [date, units_demanded].
     Compares a moving-average baseline, simple exponential smoothing and (when
@@ -181,7 +184,8 @@ def forecast_demand(df: pd.DataFrame, horizon_days: int = 7, use_sarima: bool = 
         {"name": "naive_baseline", "mae": mae_baseline, "rmse": m["rmse_baseline"], "total": baseline_daily * horizon_days},
         {"name": "exp_smoothing", "mae": mae_ses, "rmse": m["rmse_ses"], "total": ses_daily * horizon_days},
     ]
-    sar = sarima_evaluate(series, force=force_sarima) if (use_sarima and horizon_days <= SARIMA_MAX_HORIZON) else None
+    sar = (sarima_evaluate(series, force=force_sarima, cached_only=sarima_cached_only)
+           if (use_sarima and horizon_days <= SARIMA_MAX_HORIZON) else None)
     if sar is not None:
         candidates.append({"name": SARIMA_NAME, "mae": sar["mae"], "rmse": sar["rmse"],
                            "total": float(sar["forecast"][:horizon_days].sum())})

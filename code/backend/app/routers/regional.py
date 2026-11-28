@@ -32,7 +32,7 @@ def _bank_view(db: Session, bank: models.BloodBank) -> dict:
         if len(rows) < 20:
             continue
         df = pd.DataFrame([{"date": r.date, "units_demanded": r.units_demanded} for r in rows])
-        fc = forecast_demand(df, 7, use_sarima=False)  # fast path: SARIMA is reserved for the single-bank pages
+        fc = forecast_demand(df, 7, sarima_cached_only=True)  # many series: SARIMA once the startup warm-up has fitted it
         risk = assess_risk(qty, fc["predicted_units"])
         groups[bg] = {
             "stock": qty, "predicted_demand": risk["predicted_demand"], "shortfall": risk["shortfall"],

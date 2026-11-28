@@ -6,8 +6,8 @@ COPY alembic.ini .
 COPY alembic ./alembic
 COPY scripts ./scripts
 COPY app ./app
-# SARIMA off by default in the container: it is too slow for small hosting CPUs (set BLOODLINE_SARIMA=1 to enable).
-ENV PYTHONUNBUFFERED=1 BLOODLINE_USE_MIGRATIONS=1 BLOODLINE_SARIMA=0
+# SARIMA is on (BLOODLINE_SARIMA=0 turns it off); it is fitted in the background after startup.
+ENV PYTHONUNBUFFERED=1 BLOODLINE_USE_MIGRATIONS=1
 EXPOSE 8000
 # Apply migrations; when BLOODLINE_FACULTY_DEMO=1, add the synthetic demo fixture (additive and safe to rerun,
 # so the demo logins are always present after a deploy); then serve.

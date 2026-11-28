@@ -20,7 +20,7 @@ router = APIRouter(prefix="/evaluation", tags=["evaluation"])
 @router.get("/report")
 def evaluation_report(
     blood_bank_id: Optional[str] = None,
-    include_sarima: bool = False,
+    include_sarima: bool = True,
     db: Session = Depends(get_db),
     user: models.UserAccount = Depends(auth.require_roles("blood_bank_manager", "system_admin")),
 ):
