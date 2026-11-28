@@ -32,7 +32,7 @@ def get_forecast(
         raise HTTPException(400, "Not enough demand history to forecast (need at least 20 days). Run the safe `python -m app.bootstrap` command to add synthetic demand history.")
 
     df = pd.DataFrame([{"date": r.date, "units_demanded": r.units_demanded} for r in rows])
-    result = forecast_demand(df, horizon_days=horizon_days)
+    result = forecast_demand(df, horizon_days=horizon_days, force_sarima=True)  # one group: always compare SARIMA
 
     # persist the prediction so it's auditable
     pred = models.Prediction(

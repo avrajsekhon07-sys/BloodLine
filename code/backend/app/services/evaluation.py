@@ -24,7 +24,7 @@ def forecast_table(series_by_group: dict, include_sarima: bool = False) -> dict:
         m = backtest_metrics(s)
         cands = [("naive_baseline", m["mae_baseline"], m["rmse_baseline"]), ("exp_smoothing", m["mae_ses"], m["rmse_ses"])]
         if include_sarima:
-            sar = sarima_evaluate(s)
+            sar = sarima_evaluate(s, force=True)  # SARIMA was explicitly requested
             if sar:
                 cands.append(("sarima", sar["mae"], sar["rmse"]))
         best = min(cands, key=lambda c: c[1])

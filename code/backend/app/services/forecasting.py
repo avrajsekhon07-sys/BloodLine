@@ -91,8 +91,10 @@ SARIMA_MAX_HORIZON = 60
 _sarima_cache: dict = {}  # fitting takes a moment, so reuse results while the data is unchanged
 
 
-def sarima_available() -> bool:
-    if os.getenv("BLOODLINE_SARIMA", "1") == "0":
+def sarima_available(force: bool = False) -> bool:
+    """BLOODLINE_SARIMA=0 turns SARIMA off for the multi-group pages (dashboard, risk);
+    `force` is used by single-group pages (Forecast) that always show SARIMA when installed."""
+    if not force and os.getenv("BLOODLINE_SARIMA", "1") == "0":
         return False
     try:
         import statsmodels.tsa.statespace.sarimax  # noqa: F401
@@ -101,17 +103,18 @@ def sarima_available() -> bool:
     return True
 
 
-def sarima_evaluate(series: pd.Series, holdout: int = 14):
+def sarima_evaluate(series: pd.Series, holdout: int = 14, force: bool = False):
     """Chronological evaluation + forecast for SARIMA, or None if unavailable.
 
     No leakage: parameters are fitted on data BEFORE the holdout only. The fitted
     model is then run over the whole series with those parameters frozen, so each
     one-step-ahead prediction for a holdout day uses only earlier observations
-    (the same one-step-ahead protocol used for the baseline and SES). A second
-    fit on the full history produces the actual forecast."""
+    (the same one-step-ahead protocol used for the baseline and SES). The forecast
+    continues from that same model after the last observed day, so only one fit is
+    needed (this halves the time on small servers)."""
     values = series.to_numpy(dtype=float)
     n = len(values)
-    if n < SARIMA_MIN_OBS or not sarima_available():
+    if n < SARIMA_MIN_OBS or not sarima_available(force):
         return None
     key = (n, round(float(values.sum()), 3), round(float(values[-1]), 3))
     if key in _sarima_cache:
@@ -128,8 +131,7 @@ def sarima_evaluate(series: pd.Series, holdout: int = 14):
             train_fit = SARIMAX(values[:start], **kw).fit(disp=False, maxiter=50)
             frozen = train_fit.apply(values, refit=False)
             pred = np.asarray(frozen.get_prediction(start=start, end=n - 1).predicted_mean, dtype=float)
-            full_fit = SARIMAX(values, **kw).fit(disp=False, maxiter=50)
-            fc = np.clip(np.asarray(full_fit.forecast(SARIMA_MAX_HORIZON), dtype=float), 0, None)
+            fc = np.clip(np.asarray(frozen.forecast(SARIMA_MAX_HORIZON), dtype=float), 0, None)
         err = pred - values[start:]
         if not (np.all(np.isfinite(err)) and np.all(np.isfinite(fc))) or len(err) == 0:
             return None
@@ -156,7 +158,7 @@ def select_model(candidates: list) -> dict:
     return min(valid, key=lambda c: (c["mae"], _TIE_ORDER.get(c["name"], 9)))
 
 
-def forecast_demand(df: pd.DataFrame, horizon_days: int = 7, use_sarima: bool = True) -> dict:
+def forecast_demand(df: pd.DataFrame, horizon_days: int = 7, use_sarima: bool = True, force_sarima: bool = False) -> dict:
     """
     df: DataFrame with columns [date, units_demanded].
     Compares a moving-average baseline, simple exponential smoothing and (when
@@ -179,7 +181,7 @@ def forecast_demand(df: pd.DataFrame, horizon_days: int = 7, use_sarima: bool = 
         {"name": "naive_baseline", "mae": mae_baseline, "rmse": m["rmse_baseline"], "total": baseline_daily * horizon_days},
         {"name": "exp_smoothing", "mae": mae_ses, "rmse": m["rmse_ses"], "total": ses_daily * horizon_days},
     ]
-    sar = sarima_evaluate(series) if (use_sarima and horizon_days <= SARIMA_MAX_HORIZON) else None
+    sar = sarima_evaluate(series, force=force_sarima) if (use_sarima and horizon_days <= SARIMA_MAX_HORIZON) else None
     if sar is not None:
         candidates.append({"name": SARIMA_NAME, "mae": sar["mae"], "rmse": sar["rmse"],
                            "total": float(sar["forecast"][:horizon_days].sum())})
