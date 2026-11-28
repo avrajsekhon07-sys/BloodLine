@@ -29,7 +29,7 @@ Each change was checked with the backend test suite (61 tests passing) and in a 
 
 ## Tools and AI assistance
 
-An AI assistant (Claude) was used to deploy the application, write the changes and tests, and diagnose the issues above. [Edit to match your course's policy and say what you did yourself.]
+An AI assistant (Claude) was used to deploy the application, write the changes and tests, and diagnose the issues above. I created and configured the Render services and their environment settings, chose which features to add or remove (map heatmap, demo logins, in-app notifications only), tested the live site in Chrome for each role and reported the problems listed above.
 
 ## Outcome
 

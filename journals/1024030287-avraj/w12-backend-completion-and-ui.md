@@ -22,7 +22,7 @@ Backend unit tests were written for the risk rule (including the SRS example of 
 
 ## Tools and AI assistance
 
-An AI assistant (Claude) was used to generate and refactor code, write tests and help troubleshoot. [Edit this line to match your course's AI-use policy and describe what you did yourself: running, testing, reporting problems, integrating.]
+An AI assistant (Claude) was used to generate and refactor code, write tests and help troubleshoot. I audited the prototype against the SRS, decided which requirements to complete, ran the application locally, tested each role in Chrome, reported the problems I found and integrated the changes into the project.
 
 ## Outcome
 

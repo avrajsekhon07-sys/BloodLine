@@ -26,7 +26,7 @@ Checked each role manually in Chrome, including donor notification delivery, and
 
 ## Tools and AI assistance
 
-An AI assistant (Claude) was used to write code and tests and to help diagnose the errors above. [Edit to match your course's policy and say what you did yourself.]
+An AI assistant (Claude) was used to write code and tests and to help diagnose the errors above. I tested each role and the push notifications in Chrome, found and reported the notification and CI failures, re-subscribed browsers to confirm the fix, and set up the repository, branch and pull request.
 
 ## Outcome
 

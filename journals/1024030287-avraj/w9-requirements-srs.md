@@ -6,7 +6,7 @@ To document the complete requirements of the BloodLine platform in a Software Re
 
 ## Work Done
 
-- Contributed to the SRS (version 1.0) for BloodLine with the team. [State your part, for example the forecasting, shortage-risk and donor-matching sections.]
+- Contributed to the SRS (version 1.0) for BloodLine with the team, mainly the sections on demand forecasting (FR-FCST), shortage-risk detection (FR-RISK) and the synthetic demand data, which match my part of the implementation.
 - Described the six user classes (donors, hospital coordinators, inventory staff, blood-bank manager, medical staff, system administrator) and what each role may do.
 - Wrote numbered functional requirements grouped by feature: authentication (FR-AUTH), inventory (FR-INV), demand forecasting (FR-FCST), shortage risk (FR-RISK), donor matching (FR-MATCH), requests, screening, notifications, reports and regional view, donor portal and administration.
 - Specified the shortage-risk rule: shortfall = forecast demand - current stock; LOW if shortfall <= 0, MODERATE up to 25% of stock, HIGH above 25% or when stock is zero and demand is expected.
