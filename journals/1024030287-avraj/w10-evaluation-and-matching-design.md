@@ -11,7 +11,6 @@ To decide, after the SRS was written, how the system's forecasting, shortage-ris
 - Planned a way to check donor matching independently: use the SRS compatibility table as the reference and verify that every returned donor is compatible, available, consenting and past the cooldown, and that no eligible donor is left out.
 - Thought through the rule thresholds (LOW, MODERATE, HIGH) and the edge cases, such as zero stock with expected demand and a shortfall of exactly zero.
 - Planned how seasonality, parameter choice for SARIMA and the risk of fitting on future data would be handled.
-- [Add any notes or discussion points here.]
 
 ## Outcome
 

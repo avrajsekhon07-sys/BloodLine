@@ -28,15 +28,16 @@ The work included:
 - Role-based dashboard interface, Evaluation page and what-if scenarios
 - Login rate limiting
 - CI workflow and repository setup
+- Public deployment on Render and final improvements (map heatmap, demo logins, notifications)
 
 ## Weekly Journal
 
 - [Week 1 — Project Analysis](w1-project-analysis.md)
 - [Week 2 — System Design](w2-system-design.md)
-- [Week 3 — Synthetic Demand Data](w3-synthetic-data.md)
+- [Week 3 — Synthetic Demand Data](w3-synthetic-demand-data.md)
 - [Week 4 — Demand Forecasting](w4-demand-forecasting.md)
 - [Week 5 — Forecast Evaluation](w5-forecast-evaluation.md)
-- [Week 6 — Shortage Risk Detection](w6-shortage-risk.md)
+- [Week 6 — Shortage Risk Detection](w6-shortage-risk-detection.md)
 - [Week 7 — Integration & Testing](w7-integration-testing.md)
 - [Week 8 — Forecasting Model Research](w8-forecasting-model-research.md)
 - [Week 9 — Requirements (SRS)](w9-requirements-srs.md)
@@ -44,3 +45,4 @@ The work included:
 - [Week 11 — Integration and Delivery Planning](w11-integration-and-delivery-planning.md)
 - [Week 12 — Backend Completion and UI](w12-backend-completion-and-ui.md)
 - [Week 13 — Evaluation, Security and Git/CI](w13-evaluation-security-and-git.md)
+- [Week 14 — Public Deployment and Final Improvements](w14-deployment-and-final-improvements.md)

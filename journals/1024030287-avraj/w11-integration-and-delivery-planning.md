@@ -12,7 +12,6 @@ To plan how the remaining parts of the system would be completed, tested and del
 - Thought through role-based access and security needs: password hashing, expiring tokens, per-role permissions and limits on repeated failed logins.
 - Sketched the structure of the dashboards for each role and the information each one should show.
 - Planned the division of work across the team by area (database, backend, frontend, forecasting).
-- [Add any notes or discussion points here.]
 
 ## Outcome
 

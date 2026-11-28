@@ -11,7 +11,6 @@ To study which time-series models suit blood-demand data better than the baselin
 - Compared the options on practical grounds: data needed, ease of fitting, interpretability, dependencies and how well each can be evaluated fairly against the existing models.
 - Planned the evaluation protocol: a chronological train/test split, no use of future data when forecasting, MAE and RMSE as the metrics, and the moving-average baseline as the reference every model must beat.
 - Outlined how the model would be kept replaceable, so a new model can be added without changing the API.
-- [Add any sources, notes or discussions with teammates here.]
 
 ## Outcome
 
